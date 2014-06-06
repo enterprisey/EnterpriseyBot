@@ -23,7 +23,8 @@ class DYKNotifier():
         dyk_noms = []
         wikitext = self._ttdyk.getWikiText()
         print "Got wikitext from TT:DYK."
-        params = {"action":"parse", "page":"Template talk:Did you know", "prop":"templates"}
+        params = {"action":"parse", "page":"Template talk:Did you know",\
+                  "prop":"templates"}
         api_request = api.APIRequest(self._wiki, params)
         print "Sending an APIRequest for the templates on TT:DYK..."
         api_result = api_request.query()
@@ -31,11 +32,21 @@ class DYKNotifier():
         templates = json.loads(json.dumps(api_result))
         for template in templates["parse"]["templates"]:
             if template["*"].startswith("Template:Did you know nominations/"):
-                dyk_noms.append(template["*"][34:])
+                dyk_noms.append(template["*"])
         return dyk_noms
 
     def get_people_to_notify(self, dyk_noms):
         people_to_notify = []
+        for dyk_nom_title in dyk_noms:
+            print "Checking " + dyk_nom_title + "..."
+            dyk_nom = Page(self._wiki, title=dyk_nom_title)
+            nom_wikitext = dyk_nom.getWikiText()
+            line_begin = nom_wikitext.find("<small>Created by ")
+            line_end = nom_wikitext[line_begin:].find(\
+                "</small>.")
+            line_begin += len("<small>")
+            line_end += line_begin - 7 # To take out "</small>."
+            print nom_wikitext[line_begin:line_end]
         return people_to_notify
 
 def main():
@@ -44,7 +55,6 @@ def main():
     print "Constructed a DYKNotifier."
     dyk_noms = notifier.get_list_of_dyk_noms_from_ttdyk()
     print "Got a list of DYK noms from TT:DYK."
-    print dyk_noms
     people_to_notify = notifier.get_people_to_notify(dyk_noms)
     print "Got a list of people to notify."
     print people_to_notify
