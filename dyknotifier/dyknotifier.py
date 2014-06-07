@@ -1,10 +1,7 @@
 import json
-import sys
 from wikitools.wiki import Wiki
 from wikitools.page import Page
-from wikitools.user import User
 from wikitools import api
-import mwparserfromhell as Parser
 
 class DYKNotifier():
     """
@@ -35,6 +32,15 @@ class DYKNotifier():
                 dyk_noms.append(template["*"])
         return dyk_noms
 
+    def prune_dyk_nom_list(self, dyk_noms):
+        print "About to prune " + str(len(dyk_noms)) + " queries."
+        dyk_noms_strings = list_to_pipe_separated_query(dyk_noms)
+        for dyk_noms_string in dyk_noms_strings:
+            params = {"action":"query", "titles":dyk_noms_string, "prop":"categories"}
+            api_request = api.APIRequest(self._wiki, params)
+            print api_request.query()
+        return dyk_noms
+                
     def get_people_to_notify(self, dyk_noms):
         people_to_notify = []
         for dyk_nom_title in dyk_noms:
@@ -49,16 +55,47 @@ class DYKNotifier():
             print nom_wikitext[line_begin:line_end]
         return people_to_notify
 
+def query(request):
+    """
+    Queries the MediaWiki API in a humane way.
+    """
+    request['action'] = 'query'
+    request['format'] = 'json'
+    lastContinue = dict()
+    while True:
+        # Clone original request
+        req = request.copy()
+        # Modify it with the values returned in the 'continue' section of the last result.
+        req.update(lastContinue)
+        # Call API
+        result = requests.get('http://en.wikipedia.org/w/api.php', params=req).json()
+        if 'error' in result: raise Error(result['error'])
+        if 'warnings' in result: print(result['warnings'])
+        if 'query' in result: yield result['query']
+        if 'continue' not in result: break
+        lastContinue = result['continue']
+
+def list_to_pipe_separated_query(the_list):
+    result = []
+    for index in xrange(0, len(the_list) - 1, 50):
+        sub_result = ""
+        for item in [x.encode("utf-8") for x in the_list[index : index + 50]]:
+            sub_result += str(item) + "|"
+        result.append(sub_result[:-1])
+    return result
+
 def main():
-    print "Before DYKNotifier constructor"
+    print "[main()] Before DYKNotifier constructor"
     notifier = DYKNotifier()
-    print "Constructed a DYKNotifier."
+    print "[main()] Constructed a DYKNotifier."
     dyk_noms = notifier.get_list_of_dyk_noms_from_ttdyk()
-    print "Got a list of DYK noms from TT:DYK."
+    print "[main()] Got a list of DYK noms from TT:DYK."
+    dyk_noms = notifier.prune_dyk_nom_list(dyk_noms)
+    print "[main()] Pruned list of DYK noms."
     people_to_notify = notifier.get_people_to_notify(dyk_noms)
-    print "Got a list of people to notify."
+    print "[main()] Got a list of people to notify."
     print people_to_notify
-    print "Exiting main()"
+    print "[main()] Exiting main()"
 
 if __name__ == "__main__":
     main()
