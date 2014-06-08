@@ -13,7 +13,6 @@ class DYKNotifier():
     A Wikipedia bot to notify an editor if an article they had created/expanded
     was nominated for DYK by someone else.
     """
-    
 
     def __init__(self):
         self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
@@ -90,14 +89,54 @@ class DYKNotifier():
         return False
 
     def should_prune_as_self_nom(self, page):
-        wikitext = page["revisions"][0]["*"]
-        print wikitext[:100]
-        return False            
+        wikitext = ""
+        try:
+            wikitext = page["revisions"][0]["*"]
+        except KeyError:
+            return False
+        return "Self nominated" in wikitext          
                 
     def get_people_to_notify(self):
+        """
+        Returns a list of user talkpages to notify about their creations.
+        """
+        print "Getting whom to notify for" + str(len(self._dyk_noms)) +\
+              " noms..."
         people_to_notify = []
-        
+        dyk_noms_strings = list_to_pipe_separated_query(self._dyk_noms)
+        eventual_count = (len(self._dyk_noms) // 50) + (cmp(len(self._dyk_noms), 0))
+        count = 1
+        for dyk_noms_string in dyk_noms_strings:
+            params = {"action":"query", "titles":dyk_noms_string,\
+                      "prop":"revisions", "rvprop":"content"}
+            api_request = api.APIRequest(self._wiki, params)
+            api_result = api_request.query()
+            print "Processing results from query number " + str(count) +\
+                  " out of " + str(eventual_count) + "..."
+            for wikitext, title in [(page["revisions"][0]["*"], page["title"])\
+                                    for page in\
+                                    api_result["query"]["pages"].values()]:
+                success, talkpage = self._get_who_to_nominate_from_wikitext(\
+                    wikitext, title)
+                if success:
+                    people_to_notify.append(talkpage)
+            count += 1
+        print "The list of user talkpages has " + len(people_to_notify) + " members."
         return people_to_notify
+
+    def _get_who_to_nominate_from_wikitext(self, wikitext, title):
+        """
+        Given the wikitext of a DYK nom and its title, return a tuple of (
+        success, the user talkpage of whom to notify).
+        """
+        # So, there's always a template called DYKnom, called like
+        # {{DYKnom|<title of nom>|<who to notify>}}
+        # so let's just scrape it from there.
+        length_of_prefix = len("{{DYKnom|" + title + "|")
+        index = wikitext.find("{{DYKnom|" + title + "|")
+        index += length_of_prefix
+        print wikitext[index:index + wikitext[index:].find("}}")]
+        return (False, "")
 
 def pretty_print(query_result):
     """
@@ -125,9 +164,9 @@ def main():
     print "[main()] Pruned resolved noms from the list of DYK noms."
     notifier.prune_dyk_noms(PruneMode.SELF_NOM)
     print "[main()] Removed self-noms from the list of DYK noms."
-    #people_to_notify = notifier.get_people_to_notify(dyk_noms)
-    #print "[main()] Got a list of people to notify."
-    #print people_to_notify
+    people_to_notify = notifier.get_people_to_notify()
+    print "[main()] Got a list of people to notify."
+    print people_to_notify
     print "[main()] Exiting main()"
 
 if __name__ == "__main__":
