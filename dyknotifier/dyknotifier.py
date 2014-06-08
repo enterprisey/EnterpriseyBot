@@ -4,11 +4,16 @@ from wikitools.wiki import Wiki
 from wikitools.page import Page
 from wikitools import api
 
+class PruneMode():
+    RESOLVED = 1,
+    SELF_NOM = 2
+
 class DYKNotifier():
     """
     A Wikipedia bot to notify an editor if an article they had created/expanded
     was nominated for DYK by someone else.
     """
+    
 
     def __init__(self):
         self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
@@ -34,7 +39,7 @@ class DYKNotifier():
                 dyk_noms.append(template["*"])
         return dyk_noms
 
-    def prune_dyk_noms(self, should_prune):
+    def prune_dyk_noms(self, prune_mode):
         """
         Prune the list of DYK noms given a function which determines whether
         a given page should be removed.
@@ -44,13 +49,18 @@ class DYKNotifier():
         eventual_count = (len(self._dyk_noms) // 50) + (cmp(len(self._dyk_noms), 0))
         count = 1
         removed_count = 0
+        should_prune = lambda x:False
+        if prune_mode == PruneMode.RESOLVED:
+            should_prune = self.should_prune_as_resolved
+        elif prune_mode == PruneMode.SELF_NOM:
+            should_prune = self.should_prune_as_self_nom
         for dyk_noms_string in dyk_noms_strings:
             params = {"action":"query", "titles":dyk_noms_string}
             # Based on how the function is pruning, complete the rest of the params
-            if should_prune is self.should_prune_as_resolved:
+            if prune_mode == PruneMode.RESOLVED:
                 # This function uses categories, so querying for categories
                 params["prop"] = "categories"
-            elif should_prune is self.should_prune_as_self_nom:
+            elif prune_mode == PruneMode.SELF_NOM:
                 # This function uses wikitext, so querying for wikitext
                 params["prop"] = "revisions"
                 params["rvprop"] = "content"
@@ -111,9 +121,9 @@ def main():
     print "[main()] Before DYKNotifier constructor"
     notifier = DYKNotifier()
     print "[main()] Constructed a DYKNotifier."
-    notifier.prune_dyk_noms(notifier.should_prune_as_resolved)
+    notifier.prune_dyk_noms(PruneMode.RESOLVED)
     print "[main()] Pruned resolved noms from the list of DYK noms."
-    notifier.prune_dyk_noms(notifier.should_prune_as_self_nom)
+    notifier.prune_dyk_noms(PruneMode.SELF_NOM)
     print "[main()] Removed self-noms from the list of DYK noms."
     #people_to_notify = notifier.get_people_to_notify(dyk_noms)
     #print "[main()] Got a list of people to notify."
