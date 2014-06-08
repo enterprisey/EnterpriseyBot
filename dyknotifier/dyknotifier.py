@@ -16,6 +16,9 @@ class DYKNotifier():
 
     def __init__(self):
         self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
+        username = input("Username? ")
+        password = input("Password? ")
+        self._wiki.login(username, password)
         self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
         self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
 
@@ -43,9 +46,11 @@ class DYKNotifier():
         Prune the list of DYK noms given a function which determines whether
         a given page should be removed.
         """
-        print "About to prune a list of " + str(len(self._dyk_noms)) + " DYK noms."
+        print "About to prune a list of " + str(len(self._dyk_noms)) +\
+              " DYK noms."
         dyk_noms_strings = list_to_pipe_separated_query(self._dyk_noms)
-        eventual_count = (len(self._dyk_noms) // 50) + (cmp(len(self._dyk_noms), 0))
+        eventual_count = (len(self._dyk_noms) // 50) +\
+                         (cmp(len(self._dyk_noms), 0))
         count = 1
         removed_count = 0
         should_prune = lambda x:False
@@ -55,7 +60,7 @@ class DYKNotifier():
             should_prune = self.should_prune_as_self_nom
         for dyk_noms_string in dyk_noms_strings:
             params = {"action":"query", "titles":dyk_noms_string}
-            # Based on how the function is pruning, complete the rest of the params
+            # Based on the function, complete the rest of the params
             if prune_mode == PruneMode.RESOLVED:
                 # This function uses categories, so querying for categories
                 params["prop"] = "categories"
@@ -98,45 +103,77 @@ class DYKNotifier():
                 
     def get_people_to_notify(self):
         """
-        Returns a list of user talkpages to notify about their creations.
+        Returns a dict of user talkpages to notify about their creations and
+        the noms about which they should be notified.
         """
-        print "Getting whom to notify for" + str(len(self._dyk_noms)) +\
+        print "Getting whom to notify for " + str(len(self._dyk_noms)) +\
               " noms..."
-        people_to_notify = []
         dyk_noms_strings = list_to_pipe_separated_query(self._dyk_noms)
-        eventual_count = (len(self._dyk_noms) // 50) + (cmp(len(self._dyk_noms), 0))
+        eventual_count = (len(self._dyk_noms) // 50) +\
+                         (cmp(len(self._dyk_noms), 0))
         count = 1
+        people_to_notify = dict()
         for dyk_noms_string in dyk_noms_strings:
             params = {"action":"query", "titles":dyk_noms_string,\
                       "prop":"revisions", "rvprop":"content"}
             api_request = api.APIRequest(self._wiki, params)
-            api_result = api_request.query()
+            try:
+                api_result = api_request.query()
+            except AttributeError as e:
+                print "ERROR while doing a query: " + str(e)
+                count += 1
+                continue
             print "Processing results from query number " + str(count) +\
                   " out of " + str(eventual_count) + "..."
             for wikitext, title in [(page["revisions"][0]["*"], page["title"])\
                                     for page in\
                                     api_result["query"]["pages"].values()]:
-                success, talkpage = self._get_who_to_nominate_from_wikitext(\
+                success, talkpages = self._get_who_to_nominate_from_wikitext(\
                     wikitext, title)
                 if success:
-                    people_to_notify.append(talkpage)
+                    people_to_notify.update(talkpages)
             count += 1
-        print "The list of user talkpages has " + len(people_to_notify) + " members."
+        print "The dict of user talkpages has " + str(len(people_to_notify))\
+              + " members."
         return people_to_notify
 
     def _get_who_to_nominate_from_wikitext(self, wikitext, title):
         """
         Given the wikitext of a DYK nom and its title, return a tuple of (
-        success, the user talkpage of whom to notify).
+        success, a dict of user talkpages of who to notify and the titles
+        of the noms for which they should be notified).
         """
-        # So, there's always a template called DYKnom, called like
-        # {{DYKnom|<title of nom>|<who to notify>}}
-        # so let's just scrape it from there.
-        length_of_prefix = len("{{DYKnom|" + title + "|")
-        index = wikitext.find("{{DYKnom|" + title + "|")
-        index += length_of_prefix
-        print wikitext[index:index + wikitext[index:].find("}}")]
-        return (False, "")
+        if "<small>" not in wikitext: return (False, [])
+        index = wikitext.find("<small>")
+        index_end = wikitext[index:].find("</small>")
+        whodunit = wikitext[index:index_end + index]
+        # For people who use standard signatures
+        usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|talk")]\
+                     for m in re.finditer(r"User talk:", whodunit)]
+        remove_multi_duplicates(usernames)
+        print "For " + title + ", " + str(usernames)
+        result = dict()
+        for username in usernames:
+            result[username] = title
+        return (True, result)
+
+    def notify_people(self, people_to_notify):
+        for person in people_to_notify:
+            template = "{{subst:User:APersonBot/DYKNotice|" +\
+                       people_to_notify[person] + "}}"
+            talkpage = Page(self._wiki, title="User talk:" + person)
+            result = talkpage.edit(appendtext=template)
+            print "Notified " + person
+
+def remove_multi_duplicates(the_list):
+    """
+    If there's a duplicate item in the_list, remove BOTH occurrences.
+    """
+    for item in the_list[:]:
+        if the_list.count(item) > 1:
+            while item in the_list:
+                the_list.remove(item)
+    return the_list
 
 def pretty_print(query_result):
     """
@@ -166,7 +203,8 @@ def main():
     print "[main()] Removed self-noms from the list of DYK noms."
     people_to_notify = notifier.get_people_to_notify()
     print "[main()] Got a list of people to notify."
-    print people_to_notify
+    notifier.notify_people(people_to_notify)
+    print "[main()] Notified people."
     print "[main()] Exiting main()"
 
 if __name__ == "__main__":
