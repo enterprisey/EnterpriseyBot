@@ -1,3 +1,4 @@
+import getpass
 import json
 import re
 from wikitools.wiki import Wiki
@@ -16,9 +17,15 @@ class DYKNotifier():
 
     def __init__(self):
         self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
-        username = input("Username? ")
-        password = input("Password? ")
-        self._wiki.login(username, password)
+        def attempt_login():
+            username = raw_input("Username: ")
+            password = getpass.getpass()
+            self._wiki.login(username, password)
+        attempt_login()
+        while not self._wiki.isLoggedIn():
+            print "Error logging in. Try again."
+            attempt_login()
+        print "Successfully logged in as " + self._wiki.username + "."
         self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
         self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
 
@@ -40,6 +47,19 @@ class DYKNotifier():
             if template["*"].startswith("Template:Did you know nominations/"):
                 dyk_noms.append(template["*"])
         return dyk_noms
+
+    def run(self):
+        """
+        Runs the task.
+        """
+        self.prune_dyk_noms(PruneMode.RESOLVED)
+        print "[run()] Pruned resolved noms from the list of DYK noms."
+        self.prune_dyk_noms(PruneMode.SELF_NOM)
+        print "[run()] Removed self-noms from the list of DYK noms."
+        people_to_notify = self.get_people_to_notify()
+        print "[run()] Got a list of people to notify."
+        self.notify_people(people_to_notify)
+        print "[run()] Notified people."
 
     def prune_dyk_noms(self, prune_mode):
         """
@@ -117,12 +137,7 @@ class DYKNotifier():
             params = {"action":"query", "titles":dyk_noms_string,\
                       "prop":"revisions", "rvprop":"content"}
             api_request = api.APIRequest(self._wiki, params)
-            try:
-                api_result = api_request.query()
-            except AttributeError as e:
-                print "ERROR while doing a query: " + str(e)
-                count += 1
-                continue
+            api_result = api_request.query()
             print "Processing results from query number " + str(count) +\
                   " out of " + str(eventual_count) + "..."
             for wikitext, title in [(page["revisions"][0]["*"], page["title"])\
@@ -151,7 +166,7 @@ class DYKNotifier():
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|talk")]\
                      for m in re.finditer(r"User talk:", whodunit)]
         remove_multi_duplicates(usernames)
-        print "For " + title + ", " + str(usernames)
+        #print "For " + title + ", " + str(usernames)
         result = dict()
         for username in usernames:
             result[username] = title
@@ -159,11 +174,12 @@ class DYKNotifier():
 
     def notify_people(self, people_to_notify):
         for person in people_to_notify:
+            nom_name = people_to_notify[person]
             template = "{{subst:User:APersonBot/DYKNotice|" +\
-                       people_to_notify[person] + "}}"
+                       nom_name + "}}"
             talkpage = Page(self._wiki, title="User talk:" + person)
-            result = talkpage.edit(appendtext=template)
-            print "Notified " + person
+            #result = talkpage.edit(appendtext=template)
+            print "Notified " + person + " because of " + nom_name + "."
 
 def remove_multi_duplicates(the_list):
     """
@@ -197,14 +213,7 @@ def main():
     print "[main()] Before DYKNotifier constructor"
     notifier = DYKNotifier()
     print "[main()] Constructed a DYKNotifier."
-    notifier.prune_dyk_noms(PruneMode.RESOLVED)
-    print "[main()] Pruned resolved noms from the list of DYK noms."
-    notifier.prune_dyk_noms(PruneMode.SELF_NOM)
-    print "[main()] Removed self-noms from the list of DYK noms."
-    people_to_notify = notifier.get_people_to_notify()
-    print "[main()] Got a list of people to notify."
-    notifier.notify_people(people_to_notify)
-    print "[main()] Notified people."
+    notifier.run()
     print "[main()] Exiting main()"
 
 if __name__ == "__main__":
