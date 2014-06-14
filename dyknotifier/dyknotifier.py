@@ -29,6 +29,12 @@ class DYKNotifier():
         self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
         self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
 
+    #################
+    ##
+    ## MAIN FUNCTIONS
+    ##
+    #################
+
     def get_list_of_dyk_noms_from_ttdyk(self):
         """
         Returns a list of subpages of T:DYKN nominated for DYK.
@@ -152,6 +158,25 @@ class DYKNotifier():
               + " members."
         return people_to_notify
 
+    def notify_people(self, people_to_notify):
+        """
+        Substitutes User:APersonBot/DYKNotice at the end of each page in a list
+        of user talkpages, given a list of usernames.
+        """
+        for person in people_to_notify:
+            nom_name = people_to_notify[person]
+            template = "{{subst:User:APersonBot/DYKNotice|" +\
+                       nom_name + "}}"
+            talkpage = Page(self._wiki, title="User talk:" + person)
+            #result = talkpage.edit(appendtext=template)
+            print "Notified " + person + " because of " + nom_name + "."
+
+    #################
+    ##
+    ## IMPORTANT HELPER FUNCTIONS
+    ##
+    #################
+
     def _get_who_to_nominate_from_wikitext(self, wikitext, title):
         """
         Given the wikitext of a DYK nom and its title, return a tuple of (
@@ -172,42 +197,55 @@ class DYKNotifier():
             result[username] = title
         return (True, result)
 
-    def notify_people(self, people_to_notify):
-        for person in people_to_notify:
-            nom_name = people_to_notify[person]
-            template = "{{subst:User:APersonBot/DYKNotice|" +\
-                       nom_name + "}}"
-            talkpage = Page(self._wiki, title="User talk:" + person)
-            #result = talkpage.edit(appendtext=template)
-            print "Notified " + person + " because of " + nom_name + "."
+    def run_query(self, list_of_queries, params, function):
+        print "About to run " + str(len(list_of_queries)) + " queries."
+        eventual_count = (len(list_of_queries) // 50) +\
+                         (cmp(len(list_of_queries), 0))
+        count = 1
+        for titles_string in list_of_queries:
+            localized_params = {"action":"query", "titles":titles_string}
+            localized_params.update(params)
+            api_request = api.APIRequest(self._wiki, localized_params)
+            api_result = api_request.query()
+            print "Processing results from query number " + str(count) +\
+                  " out of " + str(eventual_count) + "..."
+            for page in api_result["query"]["pages"].values():
+                function(page)
+            count += 1
 
-def remove_multi_duplicates(the_list):
-    """
-    If there's a duplicate item in the_list, remove BOTH occurrences.
-    """
-    for item in the_list[:]:
-        if the_list.count(item) > 1:
-            while item in the_list:
-                the_list.remove(item)
-    return the_list
+    #################
+    ##
+    ## GENERIC HELPER FUNCTIONS
+    ##
+    #################
 
-def pretty_print(query_result):
-    """
-    What **is** beauty?
-    """
-    print json.dumps(query_result, indent=4, separators=(",", ": "))
+    def remove_multi_duplicates(the_list):
+        """
+        If there's a duplicate item in the_list, remove BOTH occurrences.
+        """
+        for item in the_list[:]:
+            if the_list.count(item) > 1:
+                while item in the_list:
+                    the_list.remove(item)
+        return the_list
 
-def list_to_pipe_separated_query(the_list):
-    """
-    Breaks a list up into pipe-separated queries of 50.
-    """
-    result = []
-    for index in xrange(0, len(the_list) - 1, 50):
-        sub_result = ""
-        for item in [x.encode("utf-8") for x in the_list[index : index + 50]]:
-            sub_result += str(item) + "|"
-        result.append(sub_result[:-1])
-    return result
+    def pretty_print(query_result):
+        """
+        What **is** beauty?
+        """
+        print json.dumps(query_result, indent=4, separators=(",", ": "))
+
+    def list_to_pipe_separated_query(the_list):
+        """
+        Breaks a list up into pipe-separated queries of 50.
+        """
+        result = []
+        for index in xrange(0, len(the_list) - 1, 50):
+            sub_result = ""
+            for item in [x.encode("utf-8") for x in the_list[index : index + 50]]:
+                sub_result += str(item) + "|"
+            result.append(sub_result[:-1])
+        return result
 
 def main():
     print "[main()] Before DYKNotifier constructor"
