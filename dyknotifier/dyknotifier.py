@@ -5,10 +5,6 @@ from wikitools.wiki import Wiki
 from wikitools.page import Page
 from wikitools import api
 
-class PruneMode():
-    RESOLVED = 1,
-    SELF_NOM = 2
-
 class DYKNotifier():
     """
     A Wikipedia bot to notify an editor if an article they had created/expanded
@@ -28,6 +24,7 @@ class DYKNotifier():
         print "Successfully logged in as " + self._wiki.username + "."
         self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
         self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
+        self._people_to_notify = dict()
 
     #################
     ##
@@ -58,60 +55,46 @@ class DYKNotifier():
         """
         Runs the task.
         """
-        self.prune_dyk_noms(PruneMode.RESOLVED)
-        print "[run()] Pruned resolved noms from the list of DYK noms."
-        self.prune_dyk_noms(PruneMode.SELF_NOM)
+        self.remove_resolved_noms()
+        print "[run()] Removed resolved noms from the list of DYK noms."
+        self.remove_self_nominated_noms()
         print "[run()] Removed self-noms from the list of DYK noms."
-        people_to_notify = self.get_people_to_notify()
+        self.get_people_to_notify()
         print "[run()] Got a list of people to notify."
-        self.notify_people(people_to_notify)
+        self.notify_people()
         print "[run()] Notified people."
 
-    def prune_dyk_noms(self, prune_mode):
+    def remove_resolved_noms(self):
         """
-        Prune the list of DYK noms given a function which determines whether
-        a given page should be removed.
+        Removes all resolved noms from the list of DYK noms.
         """
-        print "About to prune a list of " + str(len(self._dyk_noms)) +\
-              " DYK noms."
-        dyk_noms_strings = list_to_pipe_separated_query(self._dyk_noms)
-        eventual_count = (len(self._dyk_noms) // 50) +\
-                         (cmp(len(self._dyk_noms), 0))
-        count = 1
-        removed_count = 0
-        should_prune = lambda x:False
-        if prune_mode == PruneMode.RESOLVED:
-            should_prune = self.should_prune_as_resolved
-        elif prune_mode == PruneMode.SELF_NOM:
-            should_prune = self.should_prune_as_self_nom
-        for dyk_noms_string in dyk_noms_strings:
-            params = {"action":"query", "titles":dyk_noms_string}
-            # Based on the function, complete the rest of the params
-            if prune_mode == PruneMode.RESOLVED:
-                # This function uses categories, so querying for categories
-                params["prop"] = "categories"
-            elif prune_mode == PruneMode.SELF_NOM:
-                # This function uses wikitext, so querying for wikitext
-                params["prop"] = "revisions"
-                params["rvprop"] = "content"
-            api_request = api.APIRequest(self._wiki, params)
-            api_result = api_request.query()
-            print "Processing results from query number " + str(count) +\
-                  " out of " + str(eventual_count) + "..."
-            for page in api_result["query"]["pages"].values():
-                if should_prune(page):
-                    self._dyk_noms.remove(page["title"])
-                    removed_count += 1
-            count += 1
-        print "Removed " + str(removed_count) + " noms. " +\
-              str(len(self._dyk_noms)) + " left in the list."
+        def resolved_handler(page):
+            if self.should_prune_as_resolved(page):
+                self._dyk_noms.remove(page["title"])
+        dyk_noms_strings = self.list_to_pipe_separated_query(self._dyk_noms)
+        self.run_query(dyk_noms_strings, {"prop":"categories"},
+                       resolved_handler)
+
+    def remove_self_nominated_noms(self):
+        """
+        Removes all resolved noms from the list of DYK noms.
+        """
+        def resolved_handler(page):
+            if self.should_prune_as_self_nom(page):
+                self._dyk_noms.remove(page["title"])
+        dyk_noms_strings = self.list_to_pipe_separated_query(self._dyk_noms)
+        self.run_query(dyk_noms_strings,
+                       {"prop":"revisions", "rvprop":"content"},
+                       resolved_handler)
 
     def should_prune_as_resolved(self, page):
         """
         Given a page, should it be pruned from the list of DYK noms
         since it's already been passed or failed?
         """
-        if not "categories" in page:
+        try:
+            test = page["categories"]
+        except KeyError:
             return False
         for category in page["categories"]:
             if "Category:Passed DYK nominations" in category["title"] or\
@@ -138,7 +121,6 @@ class DYKNotifier():
         eventual_count = (len(self._dyk_noms) // 50) +\
                          (cmp(len(self._dyk_noms), 0))
         count = 1
-        people_to_notify = dict()
         for dyk_noms_string in dyk_noms_strings:
             params = {"action":"query", "titles":dyk_noms_string,\
                       "prop":"revisions", "rvprop":"content"}
@@ -152,19 +134,18 @@ class DYKNotifier():
                 success, talkpages = self._get_who_to_nominate_from_wikitext(\
                     wikitext, title)
                 if success:
-                    people_to_notify.update(talkpages)
+                    self._people_to_notify.update(talkpages)
             count += 1
-        print "The dict of user talkpages has " + str(len(people_to_notify))\
-              + " members."
-        return people_to_notify
+        print "The dict of user talkpages has " +\
+              str(len(self._people_to_notify)) + " members."
 
-    def notify_people(self, people_to_notify):
+    def notify_people(self):
         """
         Substitutes User:APersonBot/DYKNotice at the end of each page in a list
         of user talkpages, given a list of usernames.
         """
-        for person in people_to_notify:
-            nom_name = people_to_notify[person]
+        for person in self._people_to_notify:
+            nom_name = self._people_to_notify[person]
             template = "{{subst:User:APersonBot/DYKNotice|" +\
                        nom_name + "}}"
             talkpage = Page(self._wiki, title="User talk:" + person)
@@ -191,27 +172,38 @@ class DYKNotifier():
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|talk")]\
                      for m in re.finditer(r"User talk:", whodunit)]
         remove_multi_duplicates(usernames)
-        #print "For " + title + ", " + str(usernames)
+        print "For " + title + ", " + str(usernames)
         result = dict()
         for username in usernames:
             result[username] = title
         return (True, result)
 
     def run_query(self, list_of_queries, params, function):
-        print "About to run " + str(len(list_of_queries)) + " queries."
-        eventual_count = (len(list_of_queries) // 50) +\
-                         (cmp(len(list_of_queries), 0))
-        count = 1
+        count = 1 # The current query number.
         for titles_string in list_of_queries:
             localized_params = {"action":"query", "titles":titles_string}
             localized_params.update(params)
             api_request = api.APIRequest(self._wiki, localized_params)
             api_result = api_request.query()
             print "Processing results from query number " + str(count) +\
-                  " out of " + str(eventual_count) + "..."
+                  " out of " + str(len(list_of_queries)) + "..."
             for page in api_result["query"]["pages"].values():
                 function(page)
             count += 1
+
+    def get_template_names_from_page(self, page):
+        """
+        Returns a list of template names in the given page using an API query.
+        """
+        print "Parsing out all templates from " + page + "..."
+        params = {"action":"parse", "page":page, "prop":"templates"}
+        api_request = api.APIRequest(self._wiki, params)
+        api_result = api_request.query()
+        print "APIRequest for templates on " + page + " completed."
+        result = api_result["parse"]["templates"]
+        print "Parsed " + str(len(result)) + " templates from " + page + "."
+        print self.pretty_print(result)
+        return result        
 
     #################
     ##
@@ -219,7 +211,7 @@ class DYKNotifier():
     ##
     #################
 
-    def remove_multi_duplicates(the_list):
+    def remove_multi_duplicates(self, the_list):
         """
         If there's a duplicate item in the_list, remove BOTH occurrences.
         """
@@ -229,13 +221,13 @@ class DYKNotifier():
                     the_list.remove(item)
         return the_list
 
-    def pretty_print(query_result):
+    def pretty_print(self, query_result):
         """
         What **is** beauty?
         """
         print json.dumps(query_result, indent=4, separators=(",", ": "))
 
-    def list_to_pipe_separated_query(the_list):
+    def list_to_pipe_separated_query(self, the_list):
         """
         Breaks a list up into pipe-separated queries of 50.
         """
