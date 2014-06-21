@@ -25,6 +25,7 @@ class DYKNotifier():
         self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
         self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
         self._people_to_notify = dict()
+        self.actually_editing = False # WHETHER THE BOT WILL ACTUALLY EDIT
 
     #################
     ##
@@ -37,18 +38,12 @@ class DYKNotifier():
         Returns a list of subpages of T:DYKN nominated for DYK.
         """
         dyk_noms = []
-        wikitext = self._ttdyk.getWikiText()
-        print "Got wikitext from T:TDYK."
-        params = {"action":"parse", "page":"Template talk:Did you know",\
-                  "prop":"templates"}
-        api_request = api.APIRequest(self._wiki, params)
-        print "Sending an APIRequest for the templates on T:TDYK..."
-        api_result = api_request.query()
-        print "APIRequest completed."
-        templates = json.loads(json.dumps(api_result))
-        for template in templates["parse"]["templates"]:
-            if template["*"].startswith("Template:Did you know nominations/"):
-                dyk_noms.append(template["*"])
+        all_templates = self._ttdyk.getTemplates()
+        print "Got all " + str(len(all_templates)) + " templates from T:DYKN."
+        for template in all_templates:
+            if template.startswith("Template:Did you know nominations/"):
+                dyk_noms.append(template)
+        print "Read " + str(len(dyk_noms)) + " noms from T:DYKN."
         return dyk_noms
 
     def run(self):
@@ -56,7 +51,6 @@ class DYKNotifier():
         Runs the task.
         """
         self.remove_resolved_noms()
-        print "[run()] Removed resolved noms from the list of DYK noms."
         self.remove_self_nominated_noms()
         print "[run()] Removed self-noms from the list of DYK noms."
         self.get_people_to_notify()
@@ -74,6 +68,8 @@ class DYKNotifier():
         dyk_noms_strings = self.list_to_pipe_separated_query(self._dyk_noms)
         self.run_query(dyk_noms_strings, {"prop":"categories"},
                        resolved_handler)
+        print "[remove_resolved_noms()] Done. " + str(len(self._dyk_noms)) +\
+              " noms left."
 
     def remove_self_nominated_noms(self):
         """
@@ -86,6 +82,8 @@ class DYKNotifier():
         self.run_query(dyk_noms_strings,
                        {"prop":"revisions", "rvprop":"content"},
                        resolved_handler)
+        print "[remove_self_nominated_noms()] Done. " +\
+              str(len(self._dyk_noms)) + " noms left."
 
     def should_prune_as_resolved(self, page):
         """
@@ -117,7 +115,7 @@ class DYKNotifier():
         """
         print "Getting whom to notify for " + str(len(self._dyk_noms)) +\
               " noms..."
-        dyk_noms_strings = list_to_pipe_separated_query(self._dyk_noms)
+        dyk_noms_strings = self.list_to_pipe_separated_query(self._dyk_noms)
         eventual_count = (len(self._dyk_noms) // 50) +\
                          (cmp(len(self._dyk_noms), 0))
         count = 1
@@ -146,10 +144,11 @@ class DYKNotifier():
         """
         for person in self._people_to_notify:
             nom_name = self._people_to_notify[person]
-            template = "{{subst:User:APersonBot/DYKNotice|" +\
+            template = "{{subst:DYKNom|" +\
                        nom_name + "}}"
             talkpage = Page(self._wiki, title="User talk:" + person)
-            #result = talkpage.edit(appendtext=template)
+            if self.actually_editing:
+                result = talkpage.edit(appendtext=template, bot=True)
             print "Notified " + person + " because of " + nom_name + "."
 
     #################
@@ -171,8 +170,7 @@ class DYKNotifier():
         # For people who use standard signatures
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|talk")]\
                      for m in re.finditer(r"User talk:", whodunit)]
-        remove_multi_duplicates(usernames)
-        print "For " + title + ", " + str(usernames)
+        self.remove_multi_duplicates(usernames)
         result = dict()
         for username in usernames:
             result[username] = title
