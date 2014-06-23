@@ -195,7 +195,6 @@ class DYKNotifier():
                                        {"nom_name":nom_name})
                 print result
             print "Notified " + person + " because of " + nom_name + "."
-            break # Let's make one edit, then stop for testing purposes
 
     #################
     ##
