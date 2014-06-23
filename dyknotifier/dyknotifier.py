@@ -172,7 +172,7 @@ class DYKNotifier():
                                          self._people_to_notify[title]):
                 del self._people_to_notify[title]
         titles_string = self.list_to_pipe_separated_query(\
-            self._people_to_notify.keys())
+            ["User talk:" + x for x in self._people_to_notify.keys()])
         self.run_query(titles_string, {"prop":"revisions", "rvprop":"content"},\
                        handler)
         print "Removed " + str(initial_count - len(self._people_to_notify)) +\
@@ -277,6 +277,7 @@ class DYKNotifier():
         index_begin = wikitext[:index_end].rfind("==")
         index_begin += 3 # to get past the == part plus one space
         wikitext_nom = wikitext[index_begin:index_end]
+        print "Checking if " + wikitext_nom + " equals " + nom
         if wikitext_nom == nom:
             return True
         # If we didn't find it, there might be another notification template
