@@ -13,19 +13,29 @@ class DYKNotifier():
 
     def __init__(self):
         self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
+        self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
+        self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
+        self._people_to_notify = dict()
+
+        # CONFIGURATION
+        self.actually_editing = raw_input("Actually edit (y/n)? ") == "y"
+        self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
+                        "2|Robot]] notification about the DYK nomination of" +\
+                        "%(nom_name)s."
+
+        # LOGIN
         def attempt_login():
             username = raw_input("Username: ")
             password = getpass.getpass()
             self._wiki.login(username, password)
-        attempt_login()
-        while not self._wiki.isLoggedIn():
-            print "Error logging in. Try again."
+        if self.actually_editing:
             attempt_login()
-        print "Successfully logged in as " + self._wiki.username + "."
-        self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
-        self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
-        self._people_to_notify = dict()
-        self.actually_editing = False # WHETHER THE BOT WILL ACTUALLY EDIT
+            while not self._wiki.isLoggedIn():
+                print "Error logging in. Try again."
+                attempt_login()
+            print "Successfully logged in as " + self._wiki.username + "."
+        else:
+            print "Won't be editing, so no need to log in."
 
     #################
     ##
@@ -52,9 +62,8 @@ class DYKNotifier():
         """
         self.remove_resolved_noms()
         self.remove_self_nominated_noms()
-        print "[run()] Removed self-noms from the list of DYK noms."
         self.get_people_to_notify()
-        print "[run()] Got a list of people to notify."
+        self.prune_list_of_people()
         self.notify_people()
         print "[run()] Notified people."
 
@@ -134,8 +143,40 @@ class DYKNotifier():
                 if success:
                     self._people_to_notify.update(talkpages)
             count += 1
-        print "The dict of user talkpages has " +\
-              str(len(self._people_to_notify)) + " members."
+        print "There are" + str(len(self._people_to_notify)) +\
+              " people to notify."
+
+    def prune_list_of_people(self):
+        """
+        Removes three types of people who shouldn't be notified from the list:
+        people with blank usernames or nomination names; people with {{bots}}
+        indicating that they shouldn't be notified by this bot; and people
+        who have already been notified about the specific nomination (i.e. not
+        people who've already been notified about a different nomination)
+        """
+        initial_count = len(self._people_to_notify)
+        # Remove entries with empty keys
+        self._people_to_notify = dict([(x, y) for x, y in\
+                                       self._people_to_notify.iteritems() if x])
+        
+        # Remove people using {{bots}} to exclude this bot AND already-notified
+        # people in one go, since both use wikitext.
+        def handler(page):
+            wikitext, title = "", ""
+            try:
+                wikitext, title = page["revisions"][0]["*"], page["title"]
+            except KeyError:
+                return
+            if self._is_excluded_given_wikitext(wikitext) or\
+               self._is_already_notified(wikitext,\
+                                         self.people_to_notify[title]):
+                del self._people_to_notify[title]
+        titles_string = self.list_to_pipe_separated_query(\
+            self._people_to_notify.keys())
+        self.run_query(titles_string, {"prop":"revisions", "rvprop":"content"},\
+                       handler)
+        print "Removed " + str(initial_count - len(self._people_to_notify)) +\
+              " people. " + str(len(self._people_to_notify)) + " people left."
 
     def notify_people(self):
         """
@@ -146,10 +187,15 @@ class DYKNotifier():
             nom_name = self._people_to_notify[person]
             template = "{{subst:DYKNom|" +\
                        nom_name + "}}"
+            print "ABOUT TO NOTIFY " + str(person)
             talkpage = Page(self._wiki, title="User talk:" + person)
             if self.actually_editing:
-                result = talkpage.edit(appendtext=template, bot=True)
+                result = talkpage.edit(appendtext=template, bot=True,\
+                                       summary=self._summary %\
+                                       {"nom_name":nom_name})
+                print result
             print "Notified " + person + " because of " + nom_name + "."
+            break # Let's make one edit, then stop for testing purposes
 
     #################
     ##
@@ -201,7 +247,41 @@ class DYKNotifier():
         result = api_result["parse"]["templates"]
         print "Parsed " + str(len(result)) + " templates from " + page + "."
         print self.pretty_print(result)
-        return result        
+        return result
+
+    def _is_excluded_given_wikitext(self, wikitext):
+        """
+        Return whether {{bots}} is used in the wikitext to exclude
+        this bot.
+        """
+        if not "bots" in wikitext:
+            return False
+        strings_that_mean_excluded = ["{{nobots}}", "{{bots|allow=none}}",\
+                                      "{{bots|deny=all}}",\
+                                      "{{bots|optout=all}}"]
+        if any([x in wikitext for x in strings_that_mean_excluded]):
+            return True
+        return False
+
+    def _is_already_notified(self, wikitext, nom):
+        """"
+        Return if there is already a notification in the given wikitext for
+        the given nomination.
+        """
+        if not "<!-- Template:DYKNom -->" in wikitext:
+            return False
+        if not " has been nominated for Did You Know" in wikitext:
+            print "Found the comment for T:DYKNom but no section header!"
+            return False
+        index_end = wikitext.find(" has been nominated for Did You Know")
+        index_begin = wikitext[:index_end].rfind("==")
+        index_begin += 3 # to get past the == part plus one space
+        wikitext_nom = wikitext[index_begin:index_end]
+        if wikitext_nom == nom:
+            return True
+        # If we didn't find it, there might be another notification template
+        # in the rest of the wikitext, so let's check with a recursive call.
+        return self._is_already_notified(wikitext[index_end:], nom)
 
     #################
     ##
