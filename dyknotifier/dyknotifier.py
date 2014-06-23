@@ -169,8 +169,9 @@ class DYKNotifier():
                 return
             if self._is_excluded_given_wikitext(wikitext) or\
                self._is_already_notified(wikitext,\
-                                         self._people_to_notify[title]):
-                del self._people_to_notify[title]
+                                         self._people_to_notify[title[len(\
+                                             "User talk:"):]][34:]):
+                del self._people_to_notify[title[len("User talk:"):]]
         titles_string = self.list_to_pipe_separated_query(\
             ["User talk:" + x for x in self._people_to_notify.keys()])
         self.run_query(titles_string, {"prop":"revisions", "rvprop":"content"},\
@@ -275,14 +276,19 @@ class DYKNotifier():
             return False
         index_end = wikitext.find(" has been nominated for Did You Know")
         index_begin = wikitext[:index_end].rfind("==")
-        index_begin += 3 # to get past the == part plus one space
+        index_begin += 2 # to get past the == part
         wikitext_nom = wikitext[index_begin:index_end]
+        # In an early version of Template:DYKNom, the article name was in a link
+        wikitext_nom = wikitext_nom.replace("[", "").replace("]", "")
         print "Checking if " + wikitext_nom + " equals " + nom
         if wikitext_nom == nom:
             return True
-        # If we didn't find it, there might be another notification template
-        # in the rest of the wikitext, so let's check with a recursive call.
-        return self._is_already_notified(wikitext[index_end:], nom)
+        if wikitext.count("<!-- Template:DYKNom -->") > 1:
+            # If we didn't find it, there might be another notification template
+            # in the rest of the wikitext, so let's check with a recursive call.
+            return self._is_already_notified(wikitext[index_end:], nom)
+        else:
+            return False
 
     #################
     ##
