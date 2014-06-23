@@ -143,7 +143,7 @@ class DYKNotifier():
                 if success:
                     self._people_to_notify.update(talkpages)
             count += 1
-        print "There are" + str(len(self._people_to_notify)) +\
+        print "There are " + str(len(self._people_to_notify)) +\
               " people to notify."
 
     def prune_list_of_people(self):
@@ -169,7 +169,7 @@ class DYKNotifier():
                 return
             if self._is_excluded_given_wikitext(wikitext) or\
                self._is_already_notified(wikitext,\
-                                         self.people_to_notify[title]):
+                                         self._people_to_notify[title]):
                 del self._people_to_notify[title]
         titles_string = self.list_to_pipe_separated_query(\
             self._people_to_notify.keys())
@@ -185,11 +185,12 @@ class DYKNotifier():
         """
         for person in self._people_to_notify:
             nom_name = self._people_to_notify[person]
-            template = "{{subst:DYKNom|" +\
-                       nom_name + "}}"
+            template = "\n\n{{subst:DYKNom|" +\
+                       nom_name[34:] + "|passive=yes}}"
             print "ABOUT TO NOTIFY " + str(person)
             talkpage = Page(self._wiki, title="User talk:" + person)
             if self.actually_editing:
+                # cross fingers here
                 result = talkpage.edit(appendtext=template, bot=True,\
                                        summary=self._summary %\
                                        {"nom_name":nom_name})
