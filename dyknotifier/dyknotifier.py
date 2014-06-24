@@ -21,7 +21,7 @@ class DYKNotifier():
         self.actually_editing = raw_input("Actually edit (y/n)? ") == "y"
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                         "2|Robot]] notification about the DYK nomination of" +\
-                        "%(nom_name)s."
+                        " %(nom_name)s."
 
         # LOGIN
         def attempt_login():
@@ -188,15 +188,20 @@ class DYKNotifier():
             nom_name = self._people_to_notify[person]
             template = "\n\n{{subst:DYKNom|" +\
                        nom_name[34:] + "|passive=yes}}"
-            print "ABOUT TO NOTIFY " + str(person)
+            print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
+                  nom_name + "..."
             talkpage = Page(self._wiki, title="User talk:" + person)
             if self.actually_editing:
                 # cross fingers here
                 result = talkpage.edit(appendtext=template, bot=True,\
                                        summary=self._summary %\
-                                       {"nom_name":nom_name})
-                print result
+                                       {"nom_name":nom_name.encode(\
+                                           "ascii", "ignore")})
+                print "Result: " + str(result)
             print "Notified " + person + " because of " + nom_name + "."
+            if raw_input("Continue (y/n)? ") == "n":
+                print "Breaking..."
+                return
 
     #################
     ##
@@ -214,12 +219,18 @@ class DYKNotifier():
         index = wikitext.find("<small>")
         index_end = wikitext[index:].find("</small>")
         whodunit = wikitext[index:index_end + index]
-        # For people who use standard signatures
+        # Every user whose talk page is linked to within the <small> tags
+        # is assumed to have contributed, except...
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|talk")]\
                      for m in re.finditer(r"User talk:", whodunit)]
-        self.remove_multi_duplicates(usernames)
         result = dict()
-        for username in usernames:
+        # ...the last one, since that's is the nominator
+        nominator = usernames[:-1]
+        # Removing all instances of nominator from usernames, since he or she
+        # already knows about the nomination
+        while nominator in usernames:
+            usernames.remove(nominator)
+        for username in usernames[:-1]:
             result[username] = title
         return (True, result)
 
@@ -266,8 +277,8 @@ class DYKNotifier():
 
     def _is_already_notified(self, wikitext, nom):
         """"
-        Return if there is already a notification in the given wikitext for
-        the given nomination.
+        Return true if there is already a notification or a {{DYKProblem}} in
+        the given wikitext for the given nomination.
         """
         if not "<!-- Template:DYKNom -->" in wikitext:
             return False
@@ -280,13 +291,13 @@ class DYKNotifier():
         wikitext_nom = wikitext[index_begin:index_end]
         # In an early version of Template:DYKNom, the article name was in a link
         wikitext_nom = wikitext_nom.replace("[", "").replace("]", "")
-        print "Checking if " + wikitext_nom + " equals " + nom
         if wikitext_nom == nom:
             return True
         if wikitext.count("<!-- Template:DYKNom -->") > 1:
             # If we didn't find it, there might be another notification template
             # in the rest of the wikitext, so let's check with a recursive call.
-            return self._is_already_notified(wikitext[index_end:], nom)
+            return self._is_already_notified(wikitext[wikitext.find(\
+                "<!-- Template:DYKNom -->"):], nom)
         else:
             return False
 
