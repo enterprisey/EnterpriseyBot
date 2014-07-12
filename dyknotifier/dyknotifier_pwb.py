@@ -1,9 +1,28 @@
+import ConfigParser
+# Import pywikibot from wherever the configuration files says
+import sys
+cfgparser = ConfigParser.RawConfigParser()
+cfgparser.read("config.txt")
+pwb_location = cfgparser.get("configuration", "pwb_location")
+sys.path.append(pwb_location)
+try:
+    import pywikibot
+except ImportError:
+    # screw it
+    print "Unable to find pywikibot. Exiting..."
+    exit()
+print "Imported pywikibot."
+from pywikibot import Site, Page
+
+# Import the API library from pywikibot
+import os
+sys.path.append(os.path.join(pwb_location, "pywikibot", "data"))
+import api
+
+# Now, import everything else
 import getpass
 import json
 import re
-from wikitools.wiki import Wiki
-from wikitools.page import Page
-from wikitools import api
 
 class DYKNotifier():
     """
@@ -12,8 +31,8 @@ class DYKNotifier():
     """
 
     def __init__(self):
-        self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
-        self._ttdyk = Page(self._wiki, title="Template talk:Did you know")
+        self._wiki = Site()
+        self._ttdyk = Page(self._wiki, "Template talk:Did you know")
         self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
         self._people_to_notify = dict()
 
@@ -22,20 +41,6 @@ class DYKNotifier():
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                         "2|Robot]] notification about the DYK nomination of" +\
                         " %(nom_name)s."
-
-        # LOGIN
-        def attempt_login():
-            username = raw_input("Username: ")
-            password = getpass.getpass()
-            self._wiki.login(username, password)
-        if self.actually_editing:
-            attempt_login()
-            while not self._wiki.isLoggedIn():
-                print "Error logging in. Try again."
-                attempt_login()
-            print "Successfully logged in as " + self._wiki.username + "."
-        else:
-            print "Won't be editing, so no need to log in."
 
     #################
     ##
@@ -48,11 +53,11 @@ class DYKNotifier():
         Returns a list of subpages of T:DYKN nominated for DYK.
         """
         dyk_noms = []
-        all_templates = self._ttdyk.getTemplates()
+        all_templates = self._ttdyk.templates()
         print "Got all " + str(len(all_templates)) + " templates from T:DYKN."
-        for template in all_templates:
-            if template.startswith("Template:Did you know nominations/"):
-                dyk_noms.append(template)
+        for template in [x.title(withNamespace=False) for x in all_templates]:
+            if template.startswith("Did you know nominations/"):
+                dyk_noms.append("Template:" + template)
         print "Read " + str(len(dyk_noms)) + " noms from T:DYKN."
         return dyk_noms
 
@@ -129,10 +134,12 @@ class DYKNotifier():
                          (cmp(len(self._dyk_noms), 0))
         count = 1
         for dyk_noms_string in dyk_noms_strings:
-            params = {"action":"query", "titles":dyk_noms_string,\
+            params = {"titles":dyk_noms_string,\
                       "prop":"revisions", "rvprop":"content"}
-            api_request = api.APIRequest(self._wiki, params)
-            api_result = api_request.query()
+            api_request = api.Request(site=self._wiki, action="query")
+            for key in params.keys():
+                api_request[key] = params[key]
+            api_result = api_request.submit()
             print "Processing results from query number " + str(count) +\
                   " out of " + str(eventual_count) + "..."
             for wikitext, title in [(page["revisions"][0]["*"], page["title"])\
@@ -142,6 +149,14 @@ class DYKNotifier():
                     wikitext, title)
                 if success:
                     self._people_to_notify.update(talkpages)
+                else:
+                    if "#REDIRECT" in wikitext:
+                        print "ERROR: " + title + " is a redirect."
+                    else:
+                        print "ERROR: Unable to find anyone to notify for " +\
+                          title + " in wikitext:"
+                        print wikitext
+                        print "(end wikitext for " + title + ".)"
             count += 1
         print "There are " + str(len(self._people_to_notify)) +\
               " people to notify."
@@ -167,6 +182,11 @@ class DYKNotifier():
                 wikitext, title = page["revisions"][0]["*"], page["title"]
             except KeyError:
                 return
+            # The second argument to _is_already_notified is the nomination
+            # name, obtained from slicing "User talk:" off the title of the
+            # user talk page, then keying that into _people_to_notify,
+            # then slicing off the first 34 characters (i.e. the length of
+            # "Template:Did you know nominations/"). Yes, this is ugly.
             if self._is_excluded_given_wikitext(wikitext) or\
                self._is_already_notified(wikitext,\
                                          self._people_to_notify[title[len(\
@@ -184,12 +204,16 @@ class DYKNotifier():
         Substitutes User:APersonBot/DYKNotice at the end of each page in a list
         of user talkpages, given a list of usernames.
         """
+        people_notified_count = 0
         for person in self._people_to_notify:
             nom_name = self._people_to_notify[person]
             template = "\n\n{{subst:DYKNom|" +\
                        nom_name[34:] + "|passive=yes}}"
             print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
                   nom_name + "..."
+            if raw_input("Continue (y/n)? ") == "n":
+                print "Breaking..."
+                return
             talkpage = Page(self._wiki, title="User talk:" + person)
             if self.actually_editing:
                 # cross fingers here
@@ -198,10 +222,9 @@ class DYKNotifier():
                                        {"nom_name":nom_name.encode(\
                                            "ascii", "ignore")})
                 print "Result: " + str(result)
+                people_notified_count += 1
+                print str(people_notified_count) + " have been notified so far."
             print "Notified " + person + " because of " + nom_name + "."
-            if raw_input("Continue (y/n)? ") == "n":
-                print "Breaking..."
-                return
 
     #################
     ##
@@ -237,10 +260,11 @@ class DYKNotifier():
     def run_query(self, list_of_queries, params, function):
         count = 1 # The current query number.
         for titles_string in list_of_queries:
-            localized_params = {"action":"query", "titles":titles_string}
-            localized_params.update(params)
-            api_request = api.APIRequest(self._wiki, localized_params)
-            api_result = api_request.query()
+            api_request = api.Request(site=self._wiki, action="query")
+            api_request["titles"] = titles_string
+            for key in params.keys():
+                api_request[key] = params[key]
+            api_result = api_request.submit()
             print "Processing results from query number " + str(count) +\
                   " out of " + str(len(list_of_queries)) + "..."
             for page in api_result["query"]["pages"].values():
@@ -275,7 +299,7 @@ class DYKNotifier():
             return True
         return False
 
-    def _is_already_notified(self, wikitext, nom):
+    def _is_already_notified(self, wikitext, nom, recursion_level=0):
         """"
         Return true if there is already a notification or a {{DYKProblem}} in
         the given wikitext for the given nomination.
@@ -284,6 +308,10 @@ class DYKNotifier():
             return False
         if not " has been nominated for Did You Know" in wikitext:
             print "Found the comment for T:DYKNom but no section header!"
+            return False
+        # Check for too much recursion
+        if recursion_level > 10:
+            # If so, return false
             return False
         index_end = wikitext.find(" has been nominated for Did You Know")
         index_begin = wikitext[:index_end].rfind("==")
@@ -297,7 +325,7 @@ class DYKNotifier():
             # If we didn't find it, there might be another notification template
             # in the rest of the wikitext, so let's check with a recursive call.
             return self._is_already_notified(wikitext[wikitext.find(\
-                "<!-- Template:DYKNom -->"):], nom)
+                "<!-- Template:DYKNom -->"):], nom, recursion_level + 1)
         else:
             return False
 
@@ -336,7 +364,7 @@ class DYKNotifier():
         return result
 
 def main():
-    print "[main()] Before DYKNotifier constructor"
+    print "[main()] Constructing DYKNotifier..."
     notifier = DYKNotifier()
     print "[main()] Constructed a DYKNotifier."
     notifier.run()
