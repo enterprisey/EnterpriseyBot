@@ -33,7 +33,6 @@ class DYKNotifier():
     def __init__(self):
         self._wiki = Site()
         self._ttdyk = Page(self._wiki, "Template talk:Did you know")
-        self._dyk_noms = self.get_list_of_dyk_noms_from_ttdyk()
         self._people_to_notify = dict()
 
         # CONFIGURATION
@@ -48,27 +47,31 @@ class DYKNotifier():
     ##
     #################
 
-    def get_list_of_dyk_noms_from_ttdyk(self):
+    def read_dyk_noms(self):
         """
-        Returns a list of subpages of T:DYKN nominated for DYK.
+        Sets self._dyk_noms to a list of subpages of T:DYKN nominated for DYK.
         """
-        dyk_noms = []
+        self._dyk_noms = []
         all_templates = self._ttdyk.templates()
         print "Got all " + str(len(all_templates)) + " templates from T:DYKN."
         for template in [x.title(withNamespace=False) for x in all_templates]:
             if template.startswith("Did you know nominations/"):
-                dyk_noms.append("Template:" + template)
-        print "Read " + str(len(dyk_noms)) + " noms from T:DYKN."
-        return dyk_noms
-
+                self._dyk_noms.append("Template:" + template)
+        print "[read_dyk_noms()] Read " + str(len(self._dyk_noms)) +\
+              " noms from T:DYKN."
+    
     def run(self):
         """
         Runs the task.
         """
+        self.read_dyk_noms()
         self.remove_resolved_noms()
         self.remove_self_nominated_noms()
         self.get_people_to_notify()
         self.prune_list_of_people()
+        if raw_input("Dump list (y/n)? ") == "y":
+            self.pretty_print(self._people_to_notify)
+            self.dump_list_of_people()
         self.notify_people()
         print "[run()] Notified people."
 
@@ -112,6 +115,7 @@ class DYKNotifier():
             if "Category:Passed DYK nominations" in category["title"] or\
                "Category:Failed DYK nominations" in category["title"]:
                 return True
+        print "[should_prune_as_resolved()] Returning false: " + str(page["categories"])
         return False
 
     def should_prune_as_self_nom(self, page):
@@ -170,6 +174,7 @@ class DYKNotifier():
         people who've already been notified about a different nomination)
         """
         initial_count = len(self._people_to_notify)
+        
         # Remove entries with empty keys
         self._people_to_notify = dict([(x, y) for x, y in\
                                        self._people_to_notify.iteritems() if x])
@@ -182,18 +187,20 @@ class DYKNotifier():
                 wikitext, title = page["revisions"][0]["*"], page["title"]
             except KeyError:
                 return
-            # The second argument to _is_already_notified is the nomination
-            # name, obtained from slicing "User talk:" off the title of the
-            # user talk page, then keying that into _people_to_notify,
-            # then slicing off the first 34 characters (i.e. the length of
-            # "Template:Did you know nominations/"). Yes, this is ugly.
+            name_of_person = title[len("User talk:"):]
+            # Sanity check
+            if not name_of_person in self._people_to_notify.keys():
+                print "ERROR: " + name_of_person + " not found in the " +\
+                      "list of people to notify."
+                return
+            name_of_nom = self._people_to_notify[name_of_person]
+            
             if self._is_excluded_given_wikitext(wikitext) or\
-               self._is_already_notified(wikitext,\
-                                         self._people_to_notify[title[len(\
-                                             "User talk:"):]][34:]):
+               self._is_already_notified(wikitext, name_of_nom[34:]):
                 del self._people_to_notify[title[len("User talk:"):]]
         titles_string = self.list_to_pipe_separated_query(\
             ["User talk:" + x for x in self._people_to_notify.keys()])
+        print "[prune_list_of_people()] Running query..."
         self.run_query(titles_string, {"prop":"revisions", "rvprop":"content"},\
                        handler)
         print "Removed " + str(initial_count - len(self._people_to_notify)) +\
@@ -214,14 +221,19 @@ class DYKNotifier():
             if raw_input("Continue (y/n)? ") == "n":
                 print "Breaking..."
                 return
-            talkpage = Page(self._wiki, title="User talk:" + person)
+            talkpage = Page(self._wiki, title="User talk:" + person, ns=3)
             if self.actually_editing:
                 # cross fingers here
-                result = talkpage.edit(appendtext=template, bot=True,\
-                                       summary=self._summary %\
-                                       {"nom_name":nom_name.encode(\
-                                           "ascii", "ignore")})
-                print "Result: " + str(result)
+                talkpage.text = talkpage.text + template
+                print "[notify_people()] Saving User talk:" + person + "..."
+                summary = "Robot notifying user about DYK nomination."
+                #self._summary % {"nom_name":nom_name}
+                try:
+                    print "[notify_people()] Summary is \"" + summary + "\""
+                    talkpage.save(comment=summary)
+                    print "Saved."
+                except Exception:
+                    print "[notify_people] FATAL EXCEPTION"
                 people_notified_count += 1
                 print str(people_notified_count) + " have been notified so far."
             print "Notified " + person + " because of " + nom_name + "."
@@ -242,17 +254,19 @@ class DYKNotifier():
         index = wikitext.find("<small>")
         index_end = wikitext[index:].find("</small>")
         whodunit = wikitext[index:index_end + index]
+        
         # Every user whose talk page is linked to within the <small> tags
-        # is assumed to have contributed, except...
-        usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|talk")]\
+        # is assumed to have contributed. Looking for piped links to user
+        # talk pages.
+        usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|")]\
                      for m in re.finditer(r"User talk:", whodunit)]
-        result = dict()
-        # ...the last one, since that's is the nominator
+        # ...the last one, since that's the nominator.
         nominator = usernames[:-1]
         # Removing all instances of nominator from usernames, since he or she
         # already knows about the nomination
         while nominator in usernames:
             usernames.remove(nominator)
+        result = dict()
         for username in usernames[:-1]:
             result[username] = title
         return (True, result)
@@ -265,8 +279,8 @@ class DYKNotifier():
             for key in params.keys():
                 api_request[key] = params[key]
             api_result = api_request.submit()
-            print "Processing results from query number " + str(count) +\
-                  " out of " + str(len(list_of_queries)) + "..."
+            print "[run_query()] Processing results from query number " +\
+                  str(count) + " out of " + str(len(list_of_queries)) + "..."
             for page in api_result["query"]["pages"].values():
                 function(page)
             count += 1
@@ -328,6 +342,13 @@ class DYKNotifier():
                 "<!-- Template:DYKNom -->"):], nom, recursion_level + 1)
         else:
             return False
+
+    def dump_list_of_people(self):
+            print "JSON DUMP OF PEOPLE TO NOTIFY"
+            print "-----------------------------"
+            print json.dumps(self._people_to_notify)
+            print "-----------------------------"
+            print "END JSON DUMP"
 
     #################
     ##
