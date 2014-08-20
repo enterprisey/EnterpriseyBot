@@ -36,10 +36,12 @@ class DYKNotifier():
         self._people_to_notify = dict()
 
         # CONFIGURATION
-        self.actually_editing = raw_input("Actually edit (y/n)? ") == "y"
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                         "2|Robot]] notification about the DYK nomination of" +\
                         " %(nom_name)s."
+
+        # DEBUG OPTIONS
+        self.dupe_verbose = False # Spew out a lot of stuff about parsing noms?
 
     #################
     ##
@@ -53,78 +55,55 @@ class DYKNotifier():
         """
         self._dyk_noms = []
         all_templates = self._ttdyk.templates()
-        print "Got all " + str(len(all_templates)) + " templates from T:DYKN."
+        print "[read_dyk_noms()] Got " + str(len(all_templates)) +\
+              " templates from T:DYKN."
         for template in [x.title(withNamespace=False) for x in all_templates]:
             if template.startswith("Did you know nominations/"):
                 self._dyk_noms.append("Template:" + template)
-        print "[read_dyk_noms()] Read " + str(len(self._dyk_noms)) +\
-              " noms from T:DYKN."
+        print "[read_dyk_noms()] Out of those, " + str(len(self._dyk_noms)) +\
+              " were nominations."
     
     def run(self):
         """
         Runs the task.
         """
         self.read_dyk_noms()
-        self.remove_resolved_noms()
-        self.remove_self_nominated_noms()
+        self.remove_noms_with_wikitext(["Category:Passed DYK nominations",\
+                                        "Category:Failed DYK nominations"])
+        self.remove_noms_with_wikitext(["Self nominated"])
         self.get_people_to_notify()
         self.prune_list_of_people()
+        if len(self._people_to_notify) == 0:
+            print("[run()] Nobody to notify.")
+            return
         if raw_input("Dump list (y/n)? ") == "y":
-            self.pretty_print(self._people_to_notify)
             self.dump_list_of_people()
         self.notify_people()
         print "[run()] Notified people."
 
-    def remove_resolved_noms(self):
+    def remove_noms_with_wikitext(self, texts):
         """
-        Removes all resolved noms from the list of DYK noms.
+        Removes all noms whose wikitext contains any of the given texts
+        from the list.
         """
+        print "[remove_noms_with_wikitext()] Removing noms containing " +\
+              ("any of " if len(texts) != 1 else "") + str(texts)
+        def is_wikitext_in_page(page):
+            try:
+                wikitext = page["revisions"][0]["*"]
+                return any([text in wikitext for text in texts])
+            except KeyError:
+                print "ERROR: Couldn't find wikitext in " + str(page["title"])
+                return False
         def resolved_handler(page):
-            if self.should_prune_as_resolved(page):
-                self._dyk_noms.remove(page["title"])
-        dyk_noms_strings = self.list_to_pipe_separated_query(self._dyk_noms)
-        self.run_query(dyk_noms_strings, {"prop":"categories"},
-                       resolved_handler)
-        print "[remove_resolved_noms()] Done. " + str(len(self._dyk_noms)) +\
-              " noms left."
-
-    def remove_self_nominated_noms(self):
-        """
-        Removes all resolved noms from the list of DYK noms.
-        """
-        def resolved_handler(page):
-            if self.should_prune_as_self_nom(page):
+            if is_wikitext_in_page(page):
                 self._dyk_noms.remove(page["title"])
         dyk_noms_strings = self.list_to_pipe_separated_query(self._dyk_noms)
         self.run_query(dyk_noms_strings,
                        {"prop":"revisions", "rvprop":"content"},
                        resolved_handler)
-        print "[remove_self_nominated_noms()] Done. " +\
-              str(len(self._dyk_noms)) + " noms left."
-
-    def should_prune_as_resolved(self, page):
-        """
-        Given a page, should it be pruned from the list of DYK noms
-        since it's already been passed or failed?
-        """
-        try:
-            test = page["categories"]
-        except KeyError:
-            return False
-        for category in page["categories"]:
-            if "Category:Passed DYK nominations" in category["title"] or\
-               "Category:Failed DYK nominations" in category["title"]:
-                return True
-        print "[should_prune_as_resolved()] Returning false: " + str(page["categories"])
-        return False
-
-    def should_prune_as_self_nom(self, page):
-        wikitext = ""
-        try:
-            wikitext = page["revisions"][0]["*"]
-        except KeyError:
-            return False
-        return "Self nominated" in wikitext          
+        print "[remove_noms_with_wikitext()] Done removing noms with " +\
+              str(texts) + " - " + str(len(self._dyk_noms)) + " noms left."
                 
     def get_people_to_notify(self):
         """
@@ -162,7 +141,8 @@ class DYKNotifier():
                         print wikitext
                         print "(end wikitext for " + title + ".)"
             count += 1
-        print "There are " + str(len(self._people_to_notify)) +\
+        print "[get_people_to_notify()] There are " +\
+              str(len(self._people_to_notify)) +\
               " people to notify."
 
     def prune_list_of_people(self):
@@ -196,14 +176,16 @@ class DYKNotifier():
             name_of_nom = self._people_to_notify[name_of_person]
             
             if self._is_excluded_given_wikitext(wikitext) or\
-               self._is_already_notified(wikitext, name_of_nom[34:]):
-                del self._people_to_notify[title[len("User talk:"):]]
+               self._is_already_notified(wikitext, name_of_nom[34:],\
+                                         name_of_person):
+                del self._people_to_notify[name_of_person]
         titles_string = self.list_to_pipe_separated_query(\
             ["User talk:" + x for x in self._people_to_notify.keys()])
         print "[prune_list_of_people()] Running query..."
         self.run_query(titles_string, {"prop":"revisions", "rvprop":"content"},\
                        handler)
-        print "Removed " + str(initial_count - len(self._people_to_notify)) +\
+        print "[prune_list_of_people()] Removed " +\
+              str(initial_count - len(self._people_to_notify)) +\
               " people. " + str(len(self._people_to_notify)) + " people left."
 
     def notify_people(self):
@@ -212,6 +194,17 @@ class DYKNotifier():
         of user talkpages, given a list of usernames.
         """
         people_notified_count = 0
+
+        # Get user input on how to notify
+        edit_mode = raw_input("(q=quit, d=demo, e=edit) What? ")[1]
+        if edit_mode == "q":
+            print("[notify_people()] Quitting...")
+            return
+        actually_editing = edit_mode == "e"
+        if not actually_editing:
+            print("Demo mode; not actually editing.")
+
+        # Actually notify
         for person in self._people_to_notify:
             nom_name = self._people_to_notify[person]
             template = "\n\n{{subst:DYKNom|" +\
@@ -222,12 +215,10 @@ class DYKNotifier():
                 print "Breaking..."
                 return
             talkpage = Page(self._wiki, title="User talk:" + person, ns=3)
-            if self.actually_editing:
-                # cross fingers here
+            if actually_editing:
                 talkpage.text = talkpage.text + template
                 print "[notify_people()] Saving User talk:" + person + "..."
                 summary = "Robot notifying user about DYK nomination."
-                #self._summary % {"nom_name":nom_name}
                 try:
                     print "[notify_people()] Summary is \"" + summary + "\""
                     talkpage.save(comment=summary)
@@ -260,19 +251,30 @@ class DYKNotifier():
         # talk pages.
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|")]\
                      for m in re.finditer(r"User talk:", whodunit)]
-        # ...the last one, since that's the nominator.
-        nominator = usernames[:-1]
+        
+        # The last one is the nominator.
+        nominator = usernames[-1]
+        
         # Removing all instances of nominator from usernames, since he or she
         # already knows about the nomination
+        dupe = False
+        if self.dupe_verbose and usernames.count(nominator) != 1:
+            print("[_get_who_to_nominate_from_wikitext] Found a dupe: " + str(nominator))
+            dupe = True
+            print("[_get_who_to_nominate_from_wikitext] Before the dupe, dict was " + str(usernames))
         while nominator in usernames:
             usernames.remove(nominator)
+        if self.dupe_verbose and dupe:
+            print("[_get_who_to_nominate_from_wikitext] After the dupe, dict was " + str(usernames))
         result = dict()
         for username in usernames[:-1]:
             result[username] = title
         return (True, result)
 
     def run_query(self, list_of_queries, params, function):
-        count = 1 # The current query number.
+        
+        # count represents the current query number.
+        count = 1
         for titles_string in list_of_queries:
             api_request = api.Request(site=self._wiki, action="query")
             api_request["titles"] = titles_string
@@ -313,7 +315,7 @@ class DYKNotifier():
             return True
         return False
 
-    def _is_already_notified(self, wikitext, nom, recursion_level=0):
+    def _is_already_notified(self, wikitext, nom, user, recursion_level=0):
         """"
         Return true if there is already a notification or a {{DYKProblem}} in
         the given wikitext for the given nomination.
@@ -323,19 +325,25 @@ class DYKNotifier():
         if not " has been nominated for Did You Know" in wikitext:
             print "Found the comment for T:DYKNom but no section header!"
             return False
+        
         # Check for too much recursion
         if recursion_level > 10:
+            
             # If so, return false
             return False
         index_end = wikitext.find(" has been nominated for Did You Know")
         index_begin = wikitext[:index_end].rfind("==")
         index_begin += 2 # to get past the == part
         wikitext_nom = wikitext[index_begin:index_end]
+        
         # In an early version of Template:DYKNom, the article name was in a link
         wikitext_nom = wikitext_nom.replace("[", "").replace("]", "")
         if wikitext_nom == nom:
+            print("[_is_already_notified] Already notified " + user + " for " +\
+                  nom)
             return True
         if wikitext.count("<!-- Template:DYKNom -->") > 1:
+            
             # If we didn't find it, there might be another notification template
             # in the rest of the wikitext, so let's check with a recursive call.
             return self._is_already_notified(wikitext[wikitext.find(\

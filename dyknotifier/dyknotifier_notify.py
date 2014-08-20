@@ -17,6 +17,7 @@ class DYKNotifier():
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                         "2|Robot]] notification about the DYK nomination of" +\
                         " %(nom_name)s."
+        self._confirm = raw_input("Confirm before each edit (y/n)? ") == "y"
 
         # LOGIN
         while True:
@@ -33,8 +34,12 @@ class DYKNotifier():
         Runs the task.
         """
         self.get_people()
+        prompt = "How many people have I notified so far (0's okay)? "
+        self.people_notified_count = int(raw_input(prompt))
         self.notify_people()
-        print "[run()] Notified people."
+        print()
+        print("[run()] TOTAL # of people notified so far: " +\
+              str(self.people_notified_count))
 
     def get_people(self):
         """
@@ -57,14 +62,13 @@ class DYKNotifier():
         Substitutes User:APersonBot/DYKNotice at the end of each page in a list
         of user talkpages, given a list of usernames.
         """
-        people_notified_count = 0
         for person in self._people_to_notify.keys():
             nom_name = self._people_to_notify[person]
             template = "\n\n{{subst:DYKNom|" +\
                        nom_name[34:] + "|passive=yes}}"
             print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
                   nom_name + "..."
-            if raw_input("Continue (y/n)? ") == "n":
+            if self._confirm and raw_input("Continue (y/n)? ") == "n":
                 print "Exiting loop..."
                 return
             talkpage = Page(self._wiki, title="User talk:" + person)
