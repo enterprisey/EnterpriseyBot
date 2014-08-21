@@ -3,7 +3,10 @@
 import getpass
 import json
 import sys
+
+# pylint: disable=import-error
 from wikitools.wiki import Wiki
+# pylint: disable=import-error
 from wikitools.page import Page
 
 wiki = Wiki("http://en.wikipedia.org/w/api.php")
