@@ -1,99 +1,81 @@
+"A Python script to notify a bunch of people about their DYK nominations."
+
 import getpass
 import json
-import re
+import sys
 from wikitools.wiki import Wiki
 from wikitools.page import Page
 
-class DYKNotifier():
-    """
-    A Python script to notify a bunch of people about their DYK nominations.
-    """
+wiki = Wiki("http://en.wikipedia.org/w/api.php")
+people_to_notify = dict()
 
-    def __init__(self):
-        self._wiki = Wiki("http://en.wikipedia.org/w/api.php")
-        self._people_to_notify = dict()
+# CONFIGURATION
+SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
+		"2|Robot]] notification about the DYK nomination of" +\
+		" %(nom_name)s."
+CONFIRM = raw_input("Confirm before each edit (y/n)? ") == "y"
 
-        # CONFIGURATION
-        self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
-                        "2|Robot]] notification about the DYK nomination of" +\
-                        " %(nom_name)s."
-        self._confirm = raw_input("Confirm before each edit (y/n)? ") == "y"
+###################
+# LOGIN
+###################
+while True:
+    username = raw_input("Username: ")
+    password = getpass.getpass()
+    wiki.login(username, password)
+    if wiki.isLoggedIn():
+        break
+    print "Error logging in. Try again."
+print "Successfully logged in as " + wiki.username + "."
 
-        # LOGIN
-        while True:
-            username = raw_input("Username: ")
-            password = getpass.getpass()
-            self._wiki.login(username, password)
-            if self._wiki.isLoggedIn():
-                break
-            print "Error logging in. Try again."
-        print "Successfully logged in as " + self._wiki.username + "."
+###################
+# GET PEOPLE TO NOTIFY
+###################
+while True:
+    user_input = raw_input("JSON: ")
+    try:
+        data = json.loads(user_input)
+        keys = data.keys()
+        people_to_notify = data
+        break
+    except ValueError as ex:
+        print "ValueError: " + str(ex)
+        print "ERROR parsing JSON. Try again."
+    except AttributeError as ex:
+        print "AttributeError: " + str(ex)
+        print "ERROR parsing JSON. Try again."
 
-    def run(self):
-        """
-        Runs the task.
-        """
-        self.get_people()
-        prompt = "How many people have I notified so far (0's okay)? "
-        self.people_notified_count = int(raw_input(prompt))
-        self.notify_people()
-        print()
-        print("[run()] TOTAL # of people notified so far: " +\
-              str(self.people_notified_count))
+print "Loaded " + str(len(data.keys())) + " people. Cool!"
 
-    def get_people(self):
-        """
-        Gets a list of people from stdin and parses the JSON.
-        """
-        while True:
-            user_input = raw_input("JSON: ")
-            try:
-                data = json.loads(user_input)
-                keys = data.keys()
-                self._people_to_notify = data
-                break
-            except Exception as ex:
-                print "[get_people()] Error: " + str(ex)
-                print "[get_people()] ERROR parsing JSON. Try again."
-        print "[get_people()] Loaded " + str(len(data.keys())) + " people. Cool!"
-        
-    def notify_people(self):
-        """
-        Substitutes User:APersonBot/DYKNotice at the end of each page in a list
-        of user talkpages, given a list of usernames.
-        """
-        for person in self._people_to_notify.keys():
-            nom_name = self._people_to_notify[person]
-            template = "\n\n{{subst:DYKNom|" +\
-                       nom_name[34:] + "|passive=yes}}"
-            print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
-                  nom_name + "..."
-            if self._confirm and raw_input("Continue (y/n)? ") == "n":
-                print "Exiting loop..."
-                return
-            talkpage = Page(self._wiki, title="User talk:" + person)
-            # cross fingers here
-            result = talkpage.edit(appendtext=template, bot=True,\
-                                    summary=self._summary %\
-                                    {"nom_name":nom_name.encode(\
-                                        "ascii", "ignore")})
-            print "Result: " + str(result)
-            people_notified_count += 1
-            print str(people_notified_count) + " have been notified so far."
-            print "Notified " + person + " because of " + nom_name + "."
+prompt = "How many people have I notified so far (0's okay)? "
+people_notified_count = int(raw_input(prompt))
 
-    def pretty_print(self, query_result):
-        """
-        What **is** beauty?
-        """
-        print json.dumps(query_result, indent=4, separators=(",", ": "))
+###################
+# NOTIFY PEOPLE
+###################
+for person in people_to_notify.keys():
+    nom_name = people_to_notify[person]
+    template = "\n\n{{subst:DYKNom|" +\
+               nom_name[34:] + "|passive=yes}}"
+    print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
+          nom_name + "..."
+    if CONFIRM and raw_input("Continue (y/n)? ") == "n":
+        print "Exiting loop..."
+        sys.exit(0)
+    talkpage = Page(wiki, title="User talk:" + person)
+    # cross fingers here
+    result = talkpage.edit(appendtext=template, bot=True,\
+                            summary=SUMMARY %\
+                            {"nom_name":nom_name.encode(\
+                                "ascii", "ignore")})
+    print "Result: " + str(result)
+    people_notified_count += 1
+    print str(people_notified_count) + " have been notified so far."
+    print "Notified " + person + " because of " + nom_name + "."
 
-def main():
-    print "[main()] Before DYKNotifier constructor"
-    notifier = DYKNotifier()
-    print "[main()] Constructed a DYKNotifier."
-    notifier.run()
-    print "[main()] Exiting main()"
-
-if __name__ == "__main__":
-    main()
+###################
+# FINISH UP
+###################
+print()
+print("TOTAL # of people notified so far: " +\
+      str(people_notified_count))
+print "Done! Exiting."
