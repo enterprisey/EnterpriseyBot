@@ -39,6 +39,7 @@ class DYKNotifier(object):
         self._ttdyk = Page(self._wiki, "Template talk:Did you know")
         self._people_to_notify = dict()
         self._dyk_noms = []
+        self._trace = [] # A list of users to trace through the pruning process.
 
         # CONFIGURATION
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
@@ -185,9 +186,11 @@ class DYKNotifier(object):
             if is_excluded_given_wikitext(wikitext) or\
                self._is_already_notified(wikitext, name_of_nom[34:],\
                                          name_of_person):
+                if name_of_person in self._trace:
+                    print("[prune_list_of_people()] Removed ", name_of_person)
                 del self._people_to_notify[name_of_person]
-        titles_string = list_to_pipe_separated_query(\
-            "User talk:" + x for x in self._people_to_notify.keys())
+        titles_string = list_to_pipe_separated_query([\
+            "User talk:" + x for x in self._people_to_notify.keys()])
         print "[prune_list_of_people()] Running query..."
         self.run_query(titles_string, {"prop":"revisions", "rvprop":"content"},\
                        handler)
@@ -203,7 +206,7 @@ class DYKNotifier(object):
         people_notified_count = 0
 
         # Get user input on how to notify
-        edit_mode = raw_input("(q=quit, d=demo, e=edit) What? ")[1]
+        edit_mode = raw_input("(q=quit, d=demo, e=edit) What? ")[0]
         if edit_mode == "q":
             print("[notify_people()] Quitting...")
             return
