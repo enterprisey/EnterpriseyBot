@@ -41,12 +41,11 @@ class DYKNotifier(object):
         self._people_to_notify = dict()
         self._dyk_noms = []
         # A list of users to trace through the pruning process.
-	if cfgparser.has_option("configuration", "trace"):
+        if cfgparser.has_option("configuration", "trace"):
             self._trace = cfgparser.get("configuration", "trace").split("\n")
-	    print("[__init__] Tracing users: " + ", ".join(self._trace))
-	else:
-	    self._trace = []
-	
+            print("[__init__] Tracing users: " + ", ".join(self._trace))
+        else:
+            self._trace = []
 
         # CONFIGURATION
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
@@ -267,7 +266,7 @@ class DYKNotifier(object):
         # talk pages.
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|")]\
                      for m in re.finditer(r"User talk:", whodunit)]
-                     
+
         # If any username getting traced is in here, print the entire list.
         if len(self._trace) > 0:
             for user in usernames:
