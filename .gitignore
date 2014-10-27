@@ -6,9 +6,14 @@ sql/
 ~$*
 *~
 
-# Yeah...
+# Vim detritus
+*.swp
+
+# A configuration file
 config.txt
 
+# A JSON dump from the pwb file
+people_to_notify*
 
 #############
 ## Windows detritus

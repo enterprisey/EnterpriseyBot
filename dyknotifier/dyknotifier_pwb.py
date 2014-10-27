@@ -28,6 +28,7 @@ import api
 # Now, import everything else
 import json
 import re
+import time
 
 class DYKNotifier(object):
     """
@@ -39,7 +40,13 @@ class DYKNotifier(object):
         self._ttdyk = Page(self._wiki, "Template talk:Did you know")
         self._people_to_notify = dict()
         self._dyk_noms = []
-        self._trace = [] # A list of users to trace through the pruning process.
+        # A list of users to trace through the pruning process.
+	if cfgparser.has_option("configuration", "trace"):
+            self._trace = cfgparser.get("configuration", "trace").split("\n")
+	    print("[__init__] Tracing users: " + ", ".join(self._trace))
+	else:
+	    self._trace = []
+	
 
         # CONFIGURATION
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
@@ -82,9 +89,10 @@ class DYKNotifier(object):
         if len(self._people_to_notify) == 0:
             print("[run()] Nobody to notify.")
             return
-        if raw_input("Dump list (y/n)? ") == "y":
+        if robust_input("Dump list (y/n)? ") == "y":
             self.dump_list_of_people()
-        self.notify_people()
+        if robust_input("Notify people (y/n)? ") == "y":
+            self.notify_people()
         print "[run()] Notified people."
 
     def remove_noms_with_wikitext(self, texts):
@@ -138,6 +146,11 @@ class DYKNotifier(object):
                                     api_result["query"]["pages"].values()]:
                 success, talkpages = self.get_who_to_nominate(wikitext, title)
                 if success:
+                    if len(self._trace) > 0:
+                        for user in talkpages.keys():
+                            if user in self._trace:
+                                print("[get_people_to_notify] ENCOUNTERED " +\
+                                        user)
                     self._people_to_notify.update(talkpages)
                 else:
                     if "#REDIRECT" in wikitext:
@@ -205,23 +218,18 @@ class DYKNotifier(object):
         """
         people_notified_count = 0
 
-        # Get user input on how to notify
-        edit_mode = raw_input("(q=quit, d=demo, e=edit) What? ")[0]
-        if edit_mode == "q":
-            print("[notify_people()] Quitting...")
-            return
-        actually_editing = edit_mode == "e"
+        # Check if the user wants demo mode
+        actually_editing = robust_input("Actually edit (y/n)? ")[0] == "y"
         if not actually_editing:
-            print("Demo mode; not actually editing.")
+            print("Demo mode selected; not actually editing.")
 
-        # Actually notify
         for person in self._people_to_notify:
             nom_name = self._people_to_notify[person]
             template = "\n\n{{subst:DYKNom|" +\
                        nom_name[34:] + "|passive=yes}}"
             print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
                   nom_name + "..."
-            if raw_input("Continue (y/n)? ") == "n":
+            if robust_input("Continue (y/n)? ") == "n":
                 print "Breaking..."
                 return
             talkpage = Page(self._wiki, title="User talk:" + person, ns=3)
@@ -259,6 +267,15 @@ class DYKNotifier(object):
         # talk pages.
         usernames = [whodunit[m.end():m.end()+whodunit[m.end():].find("|")]\
                      for m in re.finditer(r"User talk:", whodunit)]
+                     
+        # If any username getting traced is in here, print the entire list.
+        if len(self._trace) > 0:
+            for user in usernames:
+                if(user in self._trace):
+                    print("[get_who_to_nominate] ENCOUNTERED " + user +\
+                            " in list for " + title)
+                    print("[get_who_to_nominate] User list: " + str(usernames))
+                    break
 
         # The last one is the nominator.
         nominator = usernames[-1]
@@ -352,11 +369,29 @@ class DYKNotifier(object):
 
     def dump_list_of_people(self):
         "Dumps the list of people to notify to stdout."
-        print "JSON DUMP OF PEOPLE TO NOTIFY"
-        print "-----------------------------"
-        print json.dumps(self._people_to_notify)
-        print "-----------------------------"
-        print "END JSON DUMP"
+        destination = robust_input("Where (c=console, f=file, b=both)? ",\
+                acceptable_values=("c", "f", "b"))
+
+        dumptext = json.dumps(self._people_to_notify)
+
+        if destination[0] in ("c", "b"):
+            print "JSON DUMP OF PEOPLE TO NOTIFY"
+            print "-----------------------------"
+            print dumptext
+            print "-----------------------------"
+            print "END JSON DUMP"
+        if destination[0] in ("f", "b"):
+            filename_suffix = 0
+            while True:
+                filename = "people_to_notify." + time.strftime("%Y%m%d") +\
+                        "." + str(filename_suffix) + ".txt"
+                if not os.path.isfile(filename):
+                    break
+                filename_suffix += 1
+            dumpfile = open(filename, "w")
+            dumpfile.write(dumptext)
+            dumpfile.close()
+            print("A JSON list was successfully written to " + filename + ".")
 
 ###################
 # END CLASS
@@ -387,6 +422,19 @@ def list_to_pipe_separated_query(the_list):
             sub_result += str(item.encode("utf-8")) + "|"
         result.append(sub_result[:-1])
     return result
+
+def robust_input(query, acceptable_values=None):
+    "Query the user in a robust fashion."
+    if not acceptable_values:
+        acceptable_values = ("y", "n")
+    error_message = "Please enter one of " +\
+            ", ".join([str("\"" + x + "\"") for x in acceptable_values]) + "."
+    while True:
+        user_input = raw_input(query)
+        if (not user_input) or user_input not in acceptable_values:
+            print(error_message)
+        else:
+            return user_input
 
 def main():
     "The main function."
