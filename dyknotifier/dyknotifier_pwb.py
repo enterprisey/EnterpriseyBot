@@ -27,7 +27,6 @@ import api
 import argparse
 import json
 import re
-import time
 
 # Parse our args. Arrrrrrrghs.
 parser = argparse.ArgumentParser(prog="DYKNotifier",
@@ -35,9 +34,9 @@ parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  "Notify editors of their DYK noms.")
 verbosity_group = parser.add_mutually_exclusive_group()
 verbosity_group.add_argument("-q", "--quiet", action="store_true",
-                   help="Print nothing but the dump (if requested).")
+                             help="Print nothing but the dump (if requested).")
 verbosity_group.add_argument("-v", "--verbose", action="store_true",
-                    help="Print a lot of stuff about nom parsing.")
+                             help="Print a lot of stuff about nom parsing.")
 parser.add_argument("-n", "--notify", action="store_true",
                     help="Actually notify people with talk page edits.")
 parser.add_argument("-d", "--dump", action="store_true",
@@ -57,8 +56,8 @@ class DYKNotifier(object):
         self._wiki = Site()
         self._ttdyk = Page(self._wiki, "Template talk:Did you know")
         self._people_to_notify = dict()
-        self._dyk_noms = []        
-        
+        self._dyk_noms = []
+
         # Initialize list of users to trace.
         if cfgparser.has_option("configuration", "trace"):
             self._trace = cfgparser.get("configuration", "trace").split("\n")
@@ -101,7 +100,7 @@ class DYKNotifier(object):
         self.remove_noms_with_wikitext(["Self nominated"])
         self.get_people_to_notify()
         self.prune_list_of_people()
-        
+
         if len(self._people_to_notify) == 0:
             print("[run()] Nobody to notify.")
             return
