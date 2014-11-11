@@ -14,10 +14,8 @@ try:
     # pylint: disable=import-error
     from pywikibot import Site, Page
 except ImportError:
-    # screw it
-    print "Unable to find pywikibot. Exiting..."
+    print("Unable to find pywikibot. Exiting...")
     exit()
-print "Imported pywikibot."
 
 # Import the API library from pywikibot
 import os
@@ -26,9 +24,29 @@ sys.path.append(os.path.join(pwb_location, "pywikibot", "data"))
 import api
 
 # Now, import everything else
+import argparse
 import json
 import re
 import time
+
+# Parse our args. Arrrrrrrghs.
+parser = argparse.ArgumentParser(prog="DYKNotifier",
+                                 description=\
+                                 "Notify editors of their DYK noms.")
+verbosity_group = parser.add_mutually_exclusive_group()
+verbosity_group.add_argument("-q", "--quiet", action="store_true",
+                   help="Print nothing but the dump (if requested).")
+verbosity_group.add_argument("-v", "--verbose", action="store_true",
+                    help="Print a lot of stuff about nom parsing.")
+parser.add_argument("-n", "--notify", action="store_true",
+                    help="Actually notify people with talk page edits.")
+parser.add_argument("-d", "--dump", action="store_true",
+                    help="Dump a list of people to notify to stdout.")
+args = parser.parse_args()
+
+# Die, STDOUT! (If the user wants)
+memory_hole = open(os.devnull, "w")
+sys.stdout = memory_hole
 
 class DYKNotifier(object):
     """
@@ -39,8 +57,9 @@ class DYKNotifier(object):
         self._wiki = Site()
         self._ttdyk = Page(self._wiki, "Template talk:Did you know")
         self._people_to_notify = dict()
-        self._dyk_noms = []
-        # A list of users to trace through the pruning process.
+        self._dyk_noms = []        
+        
+        # Initialize list of users to trace.
         if cfgparser.has_option("configuration", "trace"):
             self._trace = cfgparser.get("configuration", "trace").split("\n")
             print("[__init__] Tracing users: " + ", ".join(self._trace))
@@ -51,9 +70,6 @@ class DYKNotifier(object):
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                         "2|Robot]] notification about the DYK nomination of" +\
                         " %(nom_name)s."
-
-        # DEBUG OPTIONS
-        self.dupe_verbose = False # Spew out a lot of stuff about parsing noms?
 
     #################
     ##
@@ -85,12 +101,13 @@ class DYKNotifier(object):
         self.remove_noms_with_wikitext(["Self nominated"])
         self.get_people_to_notify()
         self.prune_list_of_people()
+        
         if len(self._people_to_notify) == 0:
             print("[run()] Nobody to notify.")
             return
-        if robust_input("Dump list (y/n)? ") == "y":
+        if args.dump:
             self.dump_list_of_people()
-        if robust_input("Notify people (y/n)? ") == "y":
+        if args.notify:
             self.notify_people()
         print "[run()] Notified people."
 
@@ -282,7 +299,7 @@ class DYKNotifier(object):
         # Removing all instances of nominator from usernames, since he or she
         # already knows about the nomination
         dupe = False
-        if self.dupe_verbose and usernames.count(nominator) != 1:
+        if args.verbose and usernames.count(nominator) != 1:
             print("[get_who_to_nominate_from_wikitext] Found a dupe: " +\
             	  str(nominator))
             dupe = True
@@ -290,7 +307,7 @@ class DYKNotifier(object):
             	    "dict was " + str(usernames))
         while nominator in usernames:
             usernames.remove(nominator)
-        if self.dupe_verbose and dupe:
+        if args.verbose and dupe:
             print("[get_who_to_nominate_from_wikitext] After the dupe, " +\
             	    "dict was " + str(usernames))
         result = dict()
@@ -368,29 +385,11 @@ class DYKNotifier(object):
 
     def dump_list_of_people(self):
         "Dumps the list of people to notify to stdout."
-        destination = robust_input("Where (c=console, f=file, b=both)? ",\
-                acceptable_values=("c", "f", "b"))
-
-        dumptext = json.dumps(self._people_to_notify)
-
-        if destination[0] in ("c", "b"):
-            print "JSON DUMP OF PEOPLE TO NOTIFY"
-            print "-----------------------------"
-            print dumptext
-            print "-----------------------------"
-            print "END JSON DUMP"
-        if destination[0] in ("f", "b"):
-            filename_suffix = 0
-            while True:
-                filename = "people_to_notify." + time.strftime("%Y%m%d") +\
-                        "." + str(filename_suffix) + ".txt"
-                if not os.path.isfile(filename):
-                    break
-                filename_suffix += 1
-            dumpfile = open(filename, "w")
-            dumpfile.write(dumptext)
-            dumpfile.close()
-            print("A JSON list was successfully written to " + filename + ".")
+        print "JSON DUMP OF PEOPLE TO NOTIFY"
+        print "-----------------------------"
+        print json.dumps(self._people_to_notify)
+        print "-----------------------------"
+        print "END JSON DUMP"
 
 ###################
 # END CLASS
