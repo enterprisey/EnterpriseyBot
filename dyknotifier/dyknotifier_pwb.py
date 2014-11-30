@@ -33,19 +33,24 @@ parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  description=\
                                  "Notify editors of their DYK noms.")
 verbosity_group = parser.add_mutually_exclusive_group()
-verbosity_group.add_argument("-q", "--quiet", action="store_true",
-                             help="Print nothing but the dump (if requested).")
-verbosity_group.add_argument("-v", "--verbose", action="store_true",
-                             help="Print a lot of stuff about nom parsing.")
-parser.add_argument("-n", "--notify", action="store_true",
-                    help="Actually notify people with talk page edits.")
-parser.add_argument("-d", "--dump", action="store_true",
-                    help="Dump a list of people to notify to stdout.")
+verbosity_group.add_argument("-v", "--verbosity", action="count",
+                             help="Increases verbosity.")
+verbosity_group.add_argument("-o", "--dump-only", action="store_true",
+                             help="Only print JSON dump.")
+editing_group = parser.add_mutually_exclusive_group()
+editing_group.add_argument("-s", "--skip-editing", action="store_true",
+                           help="Skip the user notification part.")
+editing_group.add_argument("-d", "--dry-run", action="store_true",
+                           help="Only say which edits would be made.")
 args = parser.parse_args()
 
 # Die, STDOUT! (If the user wants)
-memory_hole = open(os.devnull, "w")
-sys.stdout = memory_hole
+if args.dump_only or args.verbosity == 0:
+    black_market_stdout = sys.stdout
+    memory_hole = open(os.devnull, "w")
+    sys.stdout = memory_hole
+else:
+    black_market_stdout = None
 
 class DYKNotifier(object):
     """
@@ -104,9 +109,8 @@ class DYKNotifier(object):
         if len(self._people_to_notify) == 0:
             print("[run()] Nobody to notify.")
             return
-        if args.dump:
-            self.dump_list_of_people()
-        if args.notify:
+        self.dump_list_of_people()
+        if not args.skip_editing:
             self.notify_people()
         print "[run()] Notified people."
 
@@ -173,7 +177,10 @@ class DYKNotifier(object):
                     else:
                         print "ERROR: Unable to find anyone to notify for " +\
                           title + " in wikitext:"
-                        print wikitext
+                        try:
+                            print wikitext
+                        except UnicodeEncodeError:
+                            print "Couldn't print " + title + " due to error."
                         print "(end wikitext for " + title + ".)"
             count += 1
         print "[get_people_to_notify()] There are " +\
@@ -204,6 +211,7 @@ class DYKNotifier(object):
             except KeyError:
                 return
             name_of_person = title[len("User talk:"):]
+
             # Sanity check
             if not name_of_person in self._people_to_notify.keys():
                 print "ERROR: " + name_of_person + " not found in the " +\
@@ -212,7 +220,8 @@ class DYKNotifier(object):
             name_of_nom = self._people_to_notify[name_of_person]
 
             if is_excluded_given_wikitext(wikitext) or\
-               self._is_already_notified(wikitext, name_of_nom[34:],\
+               self._is_already_notified(wikitext,\
+                                         name_from_title(name_of_nom),\
                                          name_of_person):
                 if name_of_person in self._trace:
                     print("[prune_list_of_people()] Removed ", name_of_person)
@@ -232,23 +241,17 @@ class DYKNotifier(object):
         of user talkpages, given a list of usernames.
         """
         people_notified_count = 0
-
-        # Check if the user wants demo mode
-        actually_editing = robust_input("Actually edit (y/n)? ")[0] == "y"
-        if not actually_editing:
-            print("Demo mode selected; not actually editing.")
-
         for person in self._people_to_notify:
             nom_name = self._people_to_notify[person]
             template = "\n\n{{subst:DYKNom|" +\
-                       nom_name[34:] + "|passive=yes}}"
+                       name_from_title(nom_name) + "|passive=yes}}"
             print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
                   nom_name + "..."
             if robust_input("Continue (y/n)? ") == "n":
                 print "Breaking..."
                 return
             talkpage = Page(self._wiki, title="User talk:" + person, ns=3)
-            if actually_editing:
+            if args.dry_run:
                 talkpage.text = talkpage.text + template
                 print "[notify_people()] Saving User talk:" + person + "..."
                 summary = "Robot notifying user about DYK nomination."
@@ -289,8 +292,15 @@ class DYKNotifier(object):
                 if(user in self._trace):
                     print("[get_who_to_nominate] ENCOUNTERED " + user +\
                             " in list for " + title)
-                    print("[get_who_to_nominate] User list: " + str(usernames))
+                    if args.verbosity < 1:
+                        print("[get_who_to_nominate] User list: " +\
+                              str(usernames))
                     break
+
+        # If there aren't any usernames, WTF and exit
+        if len(usernames) == 0:
+            print("[get_who_to_nominate] WTF, no usernames for " + title)
+            return (False, [])
 
         # The last one is the nominator.
         nominator = usernames[-1]
@@ -298,20 +308,24 @@ class DYKNotifier(object):
         # Removing all instances of nominator from usernames, since he or she
         # already knows about the nomination
         dupe = False
-        if args.verbose and usernames.count(nominator) != 1:
-            print("[get_who_to_nominate_from_wikitext] Found a dupe: " +\
+        printing_dupe_messages = False # args.verbosity >= 2
+        if printing_dupe_messages and usernames.count(nominator) != 1:
+            print("[get_who_to_nominate] Found a dupe: " +\
             	  str(nominator))
             dupe = True
-            print("[get_who_to_nominate_from_wikitext] Before the dupe, " +\
+            print("[get_who_to_nominate] Before the dupe, " +\
             	    "dict was " + str(usernames))
         while nominator in usernames:
             usernames.remove(nominator)
-        if args.verbose and dupe:
-            print("[get_who_to_nominate_from_wikitext] After the dupe, " +\
+        if printing_dupe_messages and dupe:
+            print("[get_who_to_nominate] After the dupe, " +\
             	    "dict was " + str(usernames))
         result = dict()
-        for username in usernames[:-1]:
+        for username in usernames:
             result[username] = title
+
+        if args.verbosity >= 2:
+            print "[get_who_to_nominate] For " + title + ": " + str(result)
         return (True, result)
 
     def run_query(self, list_of_queries, params, function):
@@ -359,9 +373,8 @@ class DYKNotifier(object):
 
         # Check for too much recursion
         if recursion_level > 10:
-
-            # If so, return false
             return False
+
         index_end = wikitext.find(" has been nominated for Did You Know")
         index_begin = wikitext[:index_end].rfind("==")
         index_begin += 2 # to get past the == part
@@ -384,11 +397,16 @@ class DYKNotifier(object):
 
     def dump_list_of_people(self):
         "Dumps the list of people to notify to stdout."
-        print "JSON DUMP OF PEOPLE TO NOTIFY"
-        print "-----------------------------"
-        print json.dumps(self._people_to_notify)
-        print "-----------------------------"
-        print "END JSON DUMP"
+        dump_text = json.dumps(self._people_to_notify)
+        if black_market_stdout:
+            black_market_stdout.write(dump_text)
+            black_market_stdout.write("\n")
+        else:
+            print "JSON DUMP OF PEOPLE TO NOTIFY"
+            print "-----------------------------"
+            print dump_text
+            print "-----------------------------"
+            print "END JSON DUMP"
 
 ###################
 # END CLASS
@@ -432,6 +450,10 @@ def robust_input(query, acceptable_values=None):
             print(error_message)
         else:
             return user_input
+
+def name_from_title(title):
+    "Get the name of the nomination from the title of the nom subpage."
+    return title[34:]
 
 def main():
     "The main function."

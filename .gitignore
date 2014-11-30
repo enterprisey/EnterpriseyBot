@@ -6,6 +6,9 @@ sql/
 ~$*
 *~
 
+# Pywikibot detritus
+dyknotifier/apicache/
+
 # Vim detritus
 *.swp
 

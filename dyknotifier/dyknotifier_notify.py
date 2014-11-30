@@ -3,6 +3,7 @@
 import getpass
 import json
 import sys
+import argparse
 
 # pylint: disable=import-error
 from wikitools.wiki import Wiki
@@ -12,11 +13,24 @@ from wikitools.page import Page
 wiki = Wiki("http://en.wikipedia.org/w/api.php")
 people_to_notify = dict()
 
+###################
+# ARGS
+###################
+parser = argparse.ArgumentParser(prog="DYKNotifier",
+                                 description=\
+                                 "Edit talkpages of editors to be nominated.")
+parser.add_argument("-i", "--interactive", action="store_true",
+                    help="Confirm before each edit.")
+parser.add_argument("-p", "--previous-edits", type=int,
+                    help="People already notified (for running total)")
+args = parser.parse_args()
+
+people_notified_count = args.previous_edits
+
 # CONFIGURATION
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
 		"2|Robot]] notification about the DYK nomination of" +\
 		" %(nom_name)s."
-CONFIRM = raw_input("Confirm before each edit (y/n)? ") == "y"
 
 ###################
 # LOGIN
@@ -49,9 +63,6 @@ while True:
 
 print "Loaded " + str(len(data.keys())) + " people. Cool!"
 
-prompt = "How many people have I notified so far (0's okay)? "
-people_notified_count = int(raw_input(prompt))
-
 ###################
 # NOTIFY PEOPLE
 ###################
@@ -61,7 +72,7 @@ for person in people_to_notify.keys():
                nom_name[34:] + "|passive=yes}}"
     print "ABOUT TO NOTIFY " + str(person) + " BECAUSE OF " +\
           nom_name + "..."
-    if CONFIRM and raw_input("Continue (y/n)? ") == "n":
+    if args.interactive and raw_input("Continue (y/n)? ") == "n":
         print "Exiting loop..."
         sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
