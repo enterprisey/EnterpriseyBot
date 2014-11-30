@@ -5,9 +5,12 @@ sql/
 *.Cache
 ~$*
 *~
+*.log
 
 # Pywikibot detritus
 dyknotifier/apicache/
+user-config.py
+throttle.ctrl
 
 # Vim detritus
 *.swp
