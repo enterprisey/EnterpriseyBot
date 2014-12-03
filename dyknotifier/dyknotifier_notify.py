@@ -30,7 +30,7 @@ people_notified_count = args.previous_edits if args.previous_edits else 0
 
 # CONFIGURATION
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
-		"2|Robot]] notification about the DYK nomination of" +\
+		"2|Bot]] notification about the DYK nomination of" +\
 		" %(nom_name)s."
 
 ###################
@@ -50,7 +50,8 @@ print "Successfully logged in as " + wiki.username + "."
 # GET PEOPLE TO NOTIFY
 ###################
 if args.file:
-    print "Attempting to read JSON from file named " + args.file + "..."
+    args.file = args.file.strip()
+    print "Attempting to read JSON from file \"" + args.file + "\"..."
     with open(args.file) as jsonfile:
         people_to_notify = json.load(jsonfile)
         assert hasattr(people_to_notify, "keys")
@@ -78,8 +79,8 @@ for person in people_to_notify.keys():
     nom_name = people_to_notify[person]
     template = "\n\n{{subst:DYKNom|" +\
                nom_name[34:] + "|passive=yes}}"
-    print()
-    print "Notifying " + str(person) + " BECAUSE OF " +\
+    print
+    print "Notifying " + str(person) + " because of " +\
           nom_name + "..."
     if args.interactive:
         choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
@@ -93,7 +94,7 @@ for person in people_to_notify.keys():
     # cross fingers here
     result = talkpage.edit(appendtext=template, bot=True,\
                             summary=SUMMARY %\
-                            {"nom_name":nom_name.encode(\
+                            {"nom_name":nom_name[34:].encode(\
                                 "ascii", "ignore")})
     print "Result: " + str(result)
     people_notified_count += 1

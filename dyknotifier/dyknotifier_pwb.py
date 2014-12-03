@@ -391,8 +391,8 @@ class DYKNotifier(object):
         # In an early version of Template:DYKNom, the article name was in a link
         wikitext_nom = wikitext_nom.replace("[", "").replace("]", "")
         if wikitext_nom == nom:
-            print("[_is_already_notified] Already notified " + user + " for " +\
-                  nom)
+            print("[_is_already_notified] Already notified " + str(user) +\
+                  " for " + str(nom))
             return True
         if wikitext.count("<!-- Template:DYKNom -->") +\
            wikitext.count("<!--Template:DYKProblem-->") > 1:
