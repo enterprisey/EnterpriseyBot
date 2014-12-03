@@ -64,11 +64,12 @@ class DYKNotifier(object):
         self._dyk_noms = []
 
         # Initialize list of users to trace.
+        self._trace = []
         if cfgparser.has_option("configuration", "trace"):
-            self._trace = cfgparser.get("configuration", "trace").split("\n")
-            print("[__init__] Tracing users: " + ", ".join(self._trace))
-        else:
-            self._trace = []
+            if cfgparser.get("configuration", "trace"):
+                trace_option = cfgparser.get("configuration", "trace")
+                self._trace = trace_option.split("\n")
+                print("[__init__] Tracing users: " + ", ".join(self._trace))
 
         # CONFIGURATION
         self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
@@ -189,11 +190,15 @@ class DYKNotifier(object):
 
     def prune_list_of_people(self):
         """
-        Removes three types of people who shouldn't be notified from the list:
-        people with blank usernames or nomination names; people with {{bots}}
-        indicating that they shouldn't be notified by this bot; and people
-        who have already been notified about the specific nomination (i.e. not
-        people who've already been notified about a different nomination)
+        Removes four types of people who shouldn't be notified from the list:
+         - people with blank usernames or nomination names
+         - people with {{bots}} indicating that they shouldn't be notified by
+           this bot
+         - people who have already been notified about the specific nomination
+           by the bot (i.e. not people who've already been notified about a
+           different nomination)
+         - people who have been told about the nomination by other means
+           (e.g. through {{DYKProblem}})
         """
         initial_count = len(self._people_to_notify)
 
@@ -226,6 +231,8 @@ class DYKNotifier(object):
                 if name_of_person in self._trace:
                     print("[prune_list_of_people()] Removed ", name_of_person)
                 del self._people_to_notify[name_of_person]
+
+        # Actually run the query
         titles_string = list_to_pipe_separated_query([\
             "User talk:" + x for x in self._people_to_notify.keys()])
         print "[prune_list_of_people()] Running query..."
@@ -375,6 +382,7 @@ class DYKNotifier(object):
         if recursion_level > 10:
             return False
 
+        # Parse the section header to find the nom it's talking about
         index_end = wikitext.find(" has been nominated for Did You Know")
         index_begin = wikitext[:index_end].rfind("==")
         index_begin += 2 # to get past the == part
@@ -386,7 +394,8 @@ class DYKNotifier(object):
             print("[_is_already_notified] Already notified " + user + " for " +\
                   nom)
             return True
-        if wikitext.count("<!-- Template:DYKNom -->") > 1:
+        if wikitext.count("<!-- Template:DYKNom -->") +\
+           wikitext.count("<!--Template:DYKProblem-->") > 1:
 
             # If we didn't find it, there might be another notification template
             # in the rest of the wikitext, so let's check with a recursive call.
