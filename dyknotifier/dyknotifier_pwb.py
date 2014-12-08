@@ -173,7 +173,6 @@ class DYKNotifier(object):
                         except UnicodeEncodeError:
                             logging.error("Couldn't print " + title +\
                                           " due to error.")
-                        print "(end wikitext for " + title + ".)"
             count += 1
         logging.info("There are " + str(len(self._people_to_notify)) +\
               " people to notify before pruning.")
@@ -209,8 +208,8 @@ class DYKNotifier(object):
 
             # Sanity check
             if not name_of_person in self._people_to_notify.keys():
-                print "ERROR: " + name_of_person + " not found in the " +\
-                      "list of people to notify."
+                logging.error(name_of_person + " not found in the " +\
+                      "list of people to notify.")
                 return
             name_of_nom = self._people_to_notify[name_of_person]
 
@@ -248,8 +247,8 @@ class DYKNotifier(object):
             for key in params.keys():
                 api_request[key] = params[key]
             api_result = api_request.submit()
-            print "[run_query()] Processing results from query number " +\
-                  str(count) + " out of " + str(len(list_of_queries)) + "..."
+            logging.info("Processing results from query number " +\
+                  str(count) + " out of " + str(len(list_of_queries)) + "...")
             for page in api_result["query"]["pages"].values():
                 function(page)
             count += 1
@@ -258,14 +257,15 @@ class DYKNotifier(object):
         """
         Returns a list of template names in the given page using an API query.
         """
-        print "Parsing out all templates from " + page + "..."
+        logging.debug("Parsing out all templates from " + page + "...")
         api_request = api.Request(site=self._wiki, action="parse")
         api_request["page"] = page
         api_request["prop"] = "templates"
         api_result = api_request.submit()
-        print "APIRequest for templates on " + page + " completed."
+        logging.debug("APIRequest for templates on " + page + " completed.")
         result = api_result["parse"]["templates"]
-        print "Parsed " + str(len(result)) + " templates from " + page + "."
+        logging.info("Parsed " + str(len(result)) + " templates from " +\
+                     page + ".")
         return result
 
     def dump_list_of_people(self):
@@ -323,7 +323,7 @@ def get_who_to_nominate(wikitext, title):
 def is_already_notified(wikitext, nom, user, recursion_level=0):
     """"
     Return true if there is already a notification or a {{DYKProblem}} in
-    the given wikitext for the given nomination.
+    the given user talk page wikitext for the given nomination.
     """
     if not "<!-- Template:DYKNom -->" in wikitext:
         return False
@@ -386,30 +386,15 @@ def list_to_pipe_separated_query(the_list):
         result.append(sub_result[:-1])
     return result
 
-def robust_input(query, acceptable_values=None):
-    "Query the user in a robust fashion."
-    if not acceptable_values:
-        acceptable_values = ("y", "n")
-    error_message = "Please enter one of " +\
-            ", ".join([str("\"" + x + "\"") for x in acceptable_values]) + "."
-    while True:
-        user_input = raw_input(query)
-        if (not user_input) or user_input not in acceptable_values:
-            print(error_message)
-        else:
-            return user_input
-
 def name_from_title(title):
     "Get the name of the nomination from the title of the nom subpage."
     return title[34:]
 
 def main():
     "The main function."
-    logging.info("Constructing DYKNotifier...")
     notifier = DYKNotifier()
-    logging.info("Constructed a DYKNotifier.")
+    logging.debug("Calling run() from main().")
     notifier.run()
-    logging.info("Exiting main()")
 
 if __name__ == "__main__":
     main()
