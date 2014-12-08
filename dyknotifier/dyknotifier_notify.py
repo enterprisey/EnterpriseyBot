@@ -38,7 +38,7 @@ SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
 ###################
 while True:
     username = raw_input("Username: ")
-    password = getpass.getpass()
+    password = getpass.getpass("Password for " + username + " on enwiki: ")
     print "Logging in to enwiki as " + username + "..."
     wiki.login(username, password)
     if wiki.isLoggedIn():
