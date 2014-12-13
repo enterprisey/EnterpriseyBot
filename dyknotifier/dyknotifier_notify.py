@@ -97,10 +97,11 @@ for person in people_to_notify.keys():
             sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
     text_to_add = MESSAGE.substitute(nomination=nom_name)
-    edit_summary = SUMMARY.substitute(nomination=nom_name.encode("ascii", "ignore"))
+    edit_summary = SUMMARY.substitute(nomination=nom_name.encode("ascii",
+                                                                 "ignore"))
     result = talkpage.edit(appendtext=text_to_add,
-                                  bot=True,
-                              summary=edit_summary)
+                           bot=True,
+                           summary=edit_summary)
     logging.info("Result: " + str(result))
     logging.info("Notified " + person + " because of " + nom_name + ".")
 

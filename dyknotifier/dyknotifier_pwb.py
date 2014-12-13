@@ -85,7 +85,7 @@ class DYKNotifier(object):
         Runs the task.
         """
         self.read_dyk_noms()
-        self.remove_noms_with_wikitext(["Category:Passed DYK nominations",\
+        self.remove_noms_with_wikitext(["Category:Passed DYK nominations",
                                         "Category:Failed DYK nominations"])
         self.remove_noms_with_wikitext(["Self nominated"])
         self.get_people_to_notify()
@@ -120,8 +120,9 @@ class DYKNotifier(object):
         self.run_query(dyk_noms_strings,
                        {"prop":"revisions", "rvprop":"content"},
                        resolved_handler)
-        logging.info("Done removing noms with " +\
-              str(texts) + " - " + str(len(self._dyk_noms)) + " noms left.")
+        logging.info("Done removing noms with " +
+                     str(texts) + " - " + str(len(self._dyk_noms)) +
+                     " noms left.")
 
     def get_people_to_notify(self):
         """
@@ -297,6 +298,11 @@ def get_who_to_nominate(wikitext, title):
     # already knows about the nomination
     while nominator in usernames:
         usernames.remove(nominator)
+
+    # Removing people who have contributed to the discussion
+    discussion_text = wikitext[wikitext.find("</small>") + len("</small>"):]
+    discussion = usernames_from_text_with_sigs(discussion_text)
+    usernames = [user for user in usernames if user not in discussion]
 
     result = dict()
     for username in usernames:
