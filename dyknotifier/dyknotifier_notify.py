@@ -4,6 +4,7 @@ import getpass
 import json
 import sys
 import argparse
+from string import Template
 
 ###################
 # LOGGING
@@ -37,9 +38,10 @@ parser.add_argument("--file", help="Read JSON from a file instead.")
 args = parser.parse_args()
 
 # CONFIGURATION
-SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
+SUMMARY = Template("[[Wikipedia:Bots/Requests for approval/APersonBot " +\
 		"2|Bot]] notification about the DYK nomination of" +\
-		" %(nom_name)s."
+		" %{nomination}s.")
+MESSAGE = Template("\n\n{{subst:DYKNom|${nomination}|passive=yes}}")
 
 ###################
 # LOGIN
@@ -82,9 +84,7 @@ logging.info("Loaded " + str(len(people_to_notify.keys())) + " people. Cool!")
 # NOTIFY PEOPLE
 ###################
 for person in people_to_notify.keys():
-    nom_name = people_to_notify[person]
-    template = "\n\n{{subst:DYKNom|" +\
-               nom_name[34:] + "|passive=yes}}"
+    nom_name = people_to_notify[person][34:]
     logging.info("Notifying " + str(person) + " because of " +\
           nom_name + "...")
     if args.interactive:
@@ -96,11 +96,11 @@ for person in people_to_notify.keys():
             print "Exiting loop..."
             sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
-    # cross fingers here
-    result = talkpage.edit(appendtext=template, bot=True,\
-                            summary=SUMMARY %\
-                            {"nom_name":nom_name[34:].encode(\
-                                "ascii", "ignore")})
+    text_to_add = MESSAGE.substitute(nomination=nom_name)
+    edit_summary = SUMMARY.substitute(nomination=nom_name.encode("ascii", "ignore"))
+    result = talkpage.edit(appendtext=text_to_add,
+                                  bot=True,
+                              summary=edit_summary)
     logging.info("Result: " + str(result))
     logging.info("Notified " + person + " because of " + nom_name + ".")
 
