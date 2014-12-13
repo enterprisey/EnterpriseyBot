@@ -33,7 +33,7 @@ parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  "Edit talkpages of editors to be nominated.")
 parser.add_argument("-i", "--interactive", action="store_true",
                     help="Confirm before each edit.")
-parser.add_argument("--file", help="Read JSON from a file instead")
+parser.add_argument("--file", help="Read JSON from a file instead.")
 args = parser.parse_args()
 
 # CONFIGURATION

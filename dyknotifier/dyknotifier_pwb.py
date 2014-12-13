@@ -41,20 +41,8 @@ import re
 parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  description=\
                                  "Notify editors of their DYK noms.")
-verbosity_group = parser.add_mutually_exclusive_group()
-verbosity_group.add_argument("-v", "--verbosity", action="count",
-                             help="Increases verbosity.")
-verbosity_group.add_argument("-o", "--dump-only", action="store_true",
-                             help="Only print JSON dump.")
+parser.add_argument("--file", help="Write JSON to a specified file.")
 args = parser.parse_args()
-
-# Die, STDOUT! (If the user wants)
-if args.dump_only or args.verbosity == 0:
-    black_market_stdout = sys.stdout
-    memory_hole = open(os.devnull, "w")
-    sys.stdout = memory_hole
-else:
-    black_market_stdout = None
 
 class DYKNotifier(object):
     """
@@ -271,15 +259,11 @@ class DYKNotifier(object):
     def dump_list_of_people(self):
         "Dumps the list of people to notify to stdout."
         dump_text = json.dumps(self._people_to_notify)
-        if black_market_stdout:
-            black_market_stdout.write(dump_text)
-            black_market_stdout.write("\n")
-        else:
-            print "JSON DUMP OF PEOPLE TO NOTIFY"
-            print "-----------------------------"
-            print dump_text
-            print "-----------------------------"
-            print "END JSON DUMP"
+        print "People to notify:"
+        print dump_text
+        if args.file:
+            with open(args.file, "w") as jsonfile:
+                jsonfile.write(dump_text + "\n")
 
 ###################
 # END CLASS

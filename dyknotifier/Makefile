@@ -1,3 +1,3 @@
 .PHONY: clean
 clean:
-	rm -f *.*~ *.json
+	rm -f *~ *.json
