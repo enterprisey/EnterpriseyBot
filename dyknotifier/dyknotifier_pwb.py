@@ -41,7 +41,7 @@ import re
 parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  description=\
                                  "Notify editors of their DYK noms.")
-parser.add_argument("--file", help="Write JSON to a specified file.")
+parser.add_argument("-f", "--file", help="Write JSON to a specified file.")
 args = parser.parse_args()
 
 class DYKNotifier(object):

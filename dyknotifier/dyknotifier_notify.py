@@ -34,7 +34,8 @@ parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  "Edit talkpages of editors to be nominated.")
 parser.add_argument("-i", "--interactive", action="store_true",
                     help="Confirm before each edit.")
-parser.add_argument("--file", help="Read JSON from a file instead.")
+parser.add_argument("-f", "--file", help="Read JSON from a file instead.")
+parser.add_argument("-c", "--count", type=int, help="Notify at most n people.")
 args = parser.parse_args()
 
 # CONFIGURATION
@@ -83,17 +84,22 @@ logging.info("Loaded " + str(len(people_to_notify.keys())) + " people. Cool!")
 ###################
 # NOTIFY PEOPLE
 ###################
+num_notified = 0
 for person in people_to_notify.keys():
     nom_name = people_to_notify[person][34:]
     logging.info("Notifying " + str(person) + " because of " +\
           nom_name + "...")
+    if args.count:
+        if num_notified >= args.count:
+            logging.info(str(num_notified) + " notified; exiting.")
+            sys.exit(0)
     if args.interactive:
         choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
         if choice[0] == "s":
             print "Skipping " + str(person) + "."
             continue
         elif choice[0] == "q":
-            print "Exiting loop..."
+            print "Stop requested; exiting."
             sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
     text_to_add = MESSAGE.substitute(nomination=nom_name)
@@ -102,10 +108,11 @@ for person in people_to_notify.keys():
     result = talkpage.edit(appendtext=text_to_add,
                            bot=True,
                            summary=edit_summary)
+    num_notified += 1
     logging.info("Result: " + str(result))
     logging.info("Notified " + person + " because of " + nom_name + ".")
 
 ###################
 # FINISH UP
 ###################
-logging.info("Done! Exiting.")
+logging.info("Done; exiting.")
