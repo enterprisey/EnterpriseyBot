@@ -19,7 +19,7 @@ throttle.ctrl
 config.txt
 
 # A JSON dump from the pwb file
-people_to_notify*
+dyknotifier_list.json
 
 #############
 ## Windows detritus

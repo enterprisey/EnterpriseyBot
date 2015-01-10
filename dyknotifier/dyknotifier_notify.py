@@ -4,7 +4,6 @@ import getpass
 import json
 import sys
 import argparse
-from string import Template
 
 ###################
 # LOGGING
@@ -34,15 +33,20 @@ parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  "Edit talkpages of editors to be nominated.")
 parser.add_argument("-i", "--interactive", action="store_true",
                     help="Confirm before each edit.")
-parser.add_argument("-f", "--file", help="Read JSON from a file instead.")
-parser.add_argument("-c", "--count", type=int, help="Notify at most n people.")
+parser.add_argument("-f", "--file", help="Read JSON from a file instead.",
+                    default="dyknotifier_list.json")
+parser.add_argument("-c", "--count", type=int, help="Notify at most n people.",
+                    default=5)
 args = parser.parse_args()
 
+if args.count:
+    logging.info("Notifying at most " + str(args.count) + " people.")
+
 # CONFIGURATION
-SUMMARY = Template("[[Wikipedia:Bots/Requests for approval/APersonBot " +\
-		"2|Bot]] notification about the DYK nomination of" +\
-		" %{nomination}s.")
-MESSAGE = Template("\n\n{{subst:DYKNom|${nomination}|passive=yes}}")
+SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
+                "2|Bot]] notification about the DYK nomination of" +\
+                " {0}."
+MESSAGE = "\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
 
 ###################
 # LOGIN
@@ -96,21 +100,24 @@ for person in people_to_notify.keys():
     if args.interactive:
         choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
         if choice[0] == "s":
-            print "Skipping " + str(person) + "."
+            logging.info("Skipping " + str(person) + ".")
             continue
         elif choice[0] == "q":
-            print "Stop requested; exiting."
+            logging.info("Stop requested; exiting.")
             sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
-    text_to_add = MESSAGE.substitute(nomination=nom_name)
-    edit_summary = SUMMARY.substitute(nomination=nom_name.encode("ascii",
-                                                                 "ignore"))
+    text_to_add = MESSAGE.format(nom_name)
+    edit_summary = SUMMARY.format(nom_name.encode("ascii", "ignore"))
     result = talkpage.edit(appendtext=text_to_add,
                            bot=True,
                            summary=edit_summary)
     num_notified += 1
-    logging.info("Result: " + str(result))
-    logging.info("Notified " + person + " because of " + nom_name + ".")
+    if result[u"edit"][u"result"] == u"Success":
+        logging.info("Success! Notified " + person + " because of " +\
+                     nom_name + ".")
+    else:
+        logging.error("Couldn't notify " + person + " because of " +\
+                      nom_name + " - result: " + str(result))
 
 ###################
 # FINISH UP

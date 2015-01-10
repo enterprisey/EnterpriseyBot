@@ -36,12 +36,20 @@ import api
 import argparse
 import json
 import re
+from fuzzywuzzy import fuzz
+from bs4 import BeautifulSoup
+from clint.textui import progress
+from clint.textui import colored
+from time import sleep
 
 # Parse our args. Arrrrrrrghs.
 parser = argparse.ArgumentParser(prog="DYKNotifier",
                                  description=\
                                  "Notify editors of their DYK noms.")
-parser.add_argument("-f", "--file", help="Write JSON to a specified file.")
+parser.add_argument("-f",
+                    "--file",
+                    help="Write JSON to a specified file.",
+                    default="dyknotifier_list.json")
 args = parser.parse_args()
 
 class DYKNotifier(object):
@@ -54,11 +62,6 @@ class DYKNotifier(object):
         self._ttdyk = Page(self._wiki, "Template talk:Did you know")
         self._people_to_notify = dict()
         self._dyk_noms = []
-
-        # CONFIGURATION
-        self._summary = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
-                        "2|Robot]] notification about the DYK nomination of" +\
-                        " %(nom_name)s."
 
     #################
     ##
@@ -74,11 +77,11 @@ class DYKNotifier(object):
         all_templates = self._ttdyk.templates()
         logging.info("Got " + str(len(all_templates)) +\
                      " templates from T:DYKN.")
-        for template in [x.title(withNamespace=False) for x in all_templates]:
+        for template in (x.title(withNamespace=False) for x in all_templates):
             if template.startswith("Did you know nominations/"):
                 self._dyk_noms.append("Template:" + template)
         logging.info("Out of those, " + str(len(self._dyk_noms)) +\
-              " were nominations.")
+                     " were nominations.")
 
     def run(self):
         """
@@ -132,37 +135,18 @@ class DYKNotifier(object):
         logging.info("Getting whom to notify for " + str(len(self._dyk_noms)) +\
               " noms...")
         dyk_noms_strings = list_to_pipe_separated_query(self._dyk_noms)
-        eventual_count = (len(self._dyk_noms) // 50) +\
-                         (cmp(len(self._dyk_noms), 0))
-        count = 1
-        for dyk_noms_string in dyk_noms_strings:
+        for dyk_noms_string in progress.bar(dyk_noms_strings):
             params = {"titles":dyk_noms_string,\
                       "prop":"revisions", "rvprop":"content"}
             api_request = api.Request(site=self._wiki, action="query")
             for key in params.keys():
                 api_request[key] = params[key]
             api_result = api_request.submit()
-            logging.info("Processing results from query number " + str(count) +\
-                  " out of " + str(eventual_count) + "...")
             for wikitext, title in [(page["revisions"][0]["*"], page["title"])\
                                     for page in\
                                     api_result["query"]["pages"].values()]:
-                success, talkpages = get_who_to_nominate(wikitext, title)
-                if success:
-                    self._people_to_notify.update(talkpages)
-                else:
-                    if "#REDIRECT" in wikitext:
-                        logging.error(title + " is a redirect.")
-                    else:
-                        logging.error("Unable to find anyone to notify for " +\
-                          title + " in wikitext.")
-                        try:
-                            logging.debug("Wikitext for " + title + ": " +\
-                                          wikitext)
-                        except UnicodeEncodeError:
-                            logging.error("Couldn't print " + title +\
-                                          " due to error.")
-            count += 1
+                self._people_to_notify.update(get_who_to_nominate(wikitext,
+                                                                  title))
         logging.info("There are " + str(len(self._people_to_notify)) +\
               " people to notify before pruning.")
 
@@ -204,7 +188,7 @@ class DYKNotifier(object):
 
             if is_excluded_given_wikitext(wikitext) or\
                is_already_notified(wikitext,\
-                                   name_from_title(name_of_nom),\
+                                   name_of_nom,\
                                    name_of_person):
                 del self._people_to_notify[name_of_person]
 
@@ -226,21 +210,17 @@ class DYKNotifier(object):
 
     def run_query(self, list_of_queries, params, function):
         """
-    	Runs a query on the given lists of queries with the given params and
-    	the given handler.
-    	"""
-        count = 1
-        for titles_string in list_of_queries:
+        Runs a query on the given lists of queries with the given params and
+        the given handler.
+        """
+        for titles_string in progress.bar(list_of_queries):
             api_request = api.Request(site=self._wiki, action="query")
             api_request["titles"] = titles_string
             for key in params.keys():
                 api_request[key] = params[key]
             api_result = api_request.submit()
-            logging.info("Processing results from query number " +\
-                  str(count) + " out of " + str(len(list_of_queries)) + "...")
             for page in api_result["query"]["pages"].values():
                 function(page)
-            count += 1
 
     def get_template_names_from_page(self, page):
         """
@@ -253,18 +233,17 @@ class DYKNotifier(object):
         api_result = api_request.submit()
         logging.debug("APIRequest for templates on " + page + " completed.")
         result = api_result["parse"]["templates"]
-        logging.info("Parsed " + str(len(result)) + " templates from " +\
-                     page + ".")
+        logging.info(colored.green("Parsed") + " " + str(len(result)) +\
+                     " templates from " + page + ".")
         return result
 
     def dump_list_of_people(self):
         "Dumps the list of people to notify to stdout."
-        dump_text = json.dumps(self._people_to_notify)
-        print "People to notify:"
-        print dump_text
-        if args.file:
-            with open(args.file, "w") as jsonfile:
-                jsonfile.write(dump_text + "\n")
+        with open(args.file, "w") as jsonfile:
+            jsonfile.write(json.dumps(self._people_to_notify) + "\n")
+        logging.info("Wrote " +\
+                     str(len(self._people_to_notify)) + " people to " +\
+                     args.file)
 
 ###################
 # END CLASS
@@ -272,24 +251,37 @@ class DYKNotifier(object):
 
 def get_who_to_nominate(wikitext, title):
     """
-    Given the wikitext of a DYK nom and its title, return a tuple of (
-    success, a dict of user talkpages of who to notify and the titles
-    of the noms for which they should be notified).
+    Given the wikitext of a DYK nom and its title, return a dict of user
+    talkpages of who to notify and the titles of the noms for which they
+    should be notified).
     """
-    if "<small>" not in wikitext:
-        return (False, [])
+    if "#REDIRECT" in wikitext:
+        logging.error(title + " is a redirect.")
+        return []
 
-    whodunit = re.search("<small>(.*)</small>", wikitext).group(1)
+    if "<small>" not in wikitext:
+        logging.error("<small> not found in " + title)
+        return []
+
+    soup = BeautifulSoup(wikitext)
+    small_tags = [unicode(x.string) for x in soup.find_all("small")]
+    def is_nom_string(x):
+        "Is x the line in a DYK nom reading 'Created by... Nominated by...'?"
+        return u"Nominated by" in x
+    nom_lines = filter(is_nom_string, small_tags)
+    if not len(nom_lines) == 1:
+        logging.error(u"Small tags for " + title + u": " + unicode(small_tags))
+        return []
 
     # Every user whose talk page is linked to within the <small> tags
     # is assumed to have contributed. Looking for piped links to user
     # talk pages.
-    usernames = usernames_from_text_with_sigs(whodunit)
+    usernames = usernames_from_text_with_sigs(nom_lines[0])
 
     # If there aren't any usernames, WTF and exit
     if len(usernames) == 0:
         logging.error("WTF, no usernames for " + title)
-        return (False, [])
+        return []
 
     # The last one is the nominator.
     nominator = usernames[-1]
@@ -308,42 +300,62 @@ def get_who_to_nominate(wikitext, title):
     for username in usernames:
         result[username] = title
 
-    return (True, result)
+    return result
 
 def is_already_notified(wikitext, nom, user, recursion_level=0):
     """"
     Return true if there is already a notification or a {{DYKProblem}} in
     the given user talk page wikitext for the given nomination.
     """
+
     if not "<!-- Template:DYKNom -->" in wikitext:
+        logging.debug(user + " has never been notified for anything.")
         return False
 
     if not " has been nominated for Did You Know" in wikitext:
-        logging.error("Found the comment for T:DYKNom but no section header!")
-        return False
+        logging.warning("Found the comment for " + nom +\
+                      " but no section header!")
 
     # Check for too much recursion
     if recursion_level > 10:
+        logging.error("Recursed too much on " + nom + "; aborting.")
         return False
 
-    # Parse the section header to find the nom it's talking about
-    header_regex = r"==(.*)has been nominated for Did You Know"
-    wikitext_nom = re.search(header_regex, wikitext).group(1)
-
-    # In an early version of Template:DYKNom, the article name was in a link
-    wikitext_nom = wikitext_nom.replace("[", "").replace("]", "")
-    if wikitext_nom == nom:
-        logging.warning("Already notified " + str(user) +\
-              " for " + str(nom))
+    # Test 1: Check by finding the partial ratio of a DYKNom snippet on the
+    # whole wikitext
+    encoded_nom = nom.encode("ascii", "ignore")
+    expected_dyknom_text = "You can see the hook and the discussion" +\
+                           " '''[[{0}|here]]'''.".format(encoded_nom)
+    fuzzy_ratio = fuzz.partial_ratio(expected_dyknom_text, wikitext)
+    if fuzzy_ratio == 100:
+        logging.debug(user + " has already been notified about " + nom)
         return True
 
-    if wikitext.count("<!-- Template:DYKNom -->") +\
-       wikitext.count("<!--Template:DYKProblem-->") > 1:
+    # Test 2: Check by going through section headers created by DYKNom
 
-        # If we didn't find it, there might be another notification template
-        # in the rest of the wikitext, so let's check with a recursive call.
+    # Parse a section header to find the nom it's talking about
+    header_regex = r"==(.*)has been nominated for Did You Know"
+    header_match = re.search(header_regex, wikitext)
+    if not header_match:
+        logging.error("Found the header with \"in\" but not with regex for " +\
+                      nom + " on the userpage of " + user + "!")
+        return False
+    wikitext_nom = header_match.group(1).strip()
+
+    if fuzz.partial_ratio(wikitext_nom, nom) >= 95:
+        logging.debug("Found a previous notification of " + user + " for " +\
+                      nom)
+        return True
+    else:
+        logging.debug(user +\
+                      " has already been notified about another submission, " +\
+                      wikitext_nom)
+
+    # If we didn't find it, there might be another notification template
+    # in the rest of the wikitext, so let's check with a recursive call.
+    if wikitext.count("<!-- Template:DYKNom -->") > 1:
         the_rest = wikitext[wikitext.find("<!-- Template:DYKNom -->"):]
-        return is_already_notified(the_rest, nom, recursion_level + 1)
+        return is_already_notified(the_rest, nom, user, recursion_level + 1)
     else:
         return False
 
@@ -379,6 +391,11 @@ def list_to_pipe_separated_query(the_list):
 def name_from_title(title):
     "Get the name of the nomination from the title of the nom subpage."
     return title[34:]
+
+def log_and_print(message):
+    "Prints something to the console and logs it as a debug message."
+    print(message)
+    logging.debug(message)
 
 def main():
     "The main function."
