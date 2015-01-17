@@ -91,8 +91,6 @@ logging.info("Loaded " + str(len(people_to_notify.keys())) + " people. Cool!")
 num_notified = 0
 for person in people_to_notify.keys():
     nom_name = people_to_notify[person][34:]
-    logging.info("Notifying " + str(person) + " because of " +\
-          nom_name + "...")
     if args.count:
         if num_notified >= args.count:
             logging.info(str(num_notified) + " notified; exiting.")
