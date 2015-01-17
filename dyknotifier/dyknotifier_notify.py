@@ -106,8 +106,8 @@ for person in people_to_notify.keys():
             logging.info("Stop requested; exiting.")
             sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
-    text_to_add = MESSAGE.format(nom_name)
-    edit_summary = SUMMARY.format(nom_name.encode("ascii", "ignore"))
+    text_to_add = MESSAGE.format(nom_name.encode("ascii", "replace"))
+    edit_summary = SUMMARY.format(nom_name.encode("ascii", "replace"))
     result = talkpage.edit(appendtext=text_to_add,
                            bot=True,
                            summary=edit_summary)
