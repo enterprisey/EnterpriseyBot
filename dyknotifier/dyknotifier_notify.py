@@ -43,10 +43,10 @@ if args.count:
     logging.info("Notifying at most " + str(args.count) + " people.")
 
 # CONFIGURATION
-SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot " +\
+SUMMARY = u"[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                 "2|Bot]] notification about the DYK nomination of" +\
                 " {0}."
-MESSAGE = "\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
+MESSAGE = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
 
 ###################
 # LOGIN
@@ -91,21 +91,25 @@ logging.info("Loaded " + str(len(people_to_notify.keys())) + " people. Cool!")
 num_notified = 0
 for person in people_to_notify.keys():
     nom_name = people_to_notify[person][34:]
+    person_ascii = person.encode("ascii", "replace")
+    nom_name_ascii = nom_name.encode("ascii", "replace")
     if args.count:
         if num_notified >= args.count:
             logging.info(str(num_notified) + " notified; exiting.")
             sys.exit(0)
     if args.interactive:
+        logging.info("About to notify " + person + " for " +\
+                     nom_name + ".")
         choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
         if choice[0] == "s":
-            logging.info("Skipping " + str(person) + ".")
+            logging.info("Skipping " + person + ".")
             continue
         elif choice[0] == "q":
             logging.info("Stop requested; exiting.")
             sys.exit(0)
     talkpage = Page(wiki, title="User talk:" + person)
-    text_to_add = MESSAGE.format(nom_name.encode("ascii", "replace"))
-    edit_summary = SUMMARY.format(nom_name.encode("ascii", "replace"))
+    text_to_add = MESSAGE.format(nom_name)
+    edit_summary = SUMMARY.format(nom_name)
     result = talkpage.edit(appendtext=text_to_add,
                            bot=True,
                            summary=edit_summary)
