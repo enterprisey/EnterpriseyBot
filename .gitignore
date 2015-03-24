@@ -11,6 +11,7 @@ sql/
 dyknotifier/apicache/
 user-config.py
 throttle.ctrl
+pywikibot.lwp
 
 # Vim detritus
 *.swp
@@ -20,6 +21,7 @@ config.txt
 
 # A JSON dump from the pwb file
 dyknotifier_list.json
+notified.json
 
 #############
 ## Windows detritus
