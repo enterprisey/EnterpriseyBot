@@ -2,45 +2,21 @@
 A module implementing a bot to notify editors when articles they create or
 expand are nominated for DYK by someone else.
 """
-
-import logging
-logging.basicConfig(filename='dyknotifier.log',
-                    level=logging.DEBUG,
-                    datefmt="%d %b. %Y %I:%M:%S",
-                    format="[%(asctime)s] [%(levelname)s] %(message)s")
-streamHandler = logging.StreamHandler()
-streamHandler.setLevel(logging.INFO)
-logging.getLogger().addHandler(streamHandler)
-
-import ConfigParser
-
-# Import pywikibot from wherever the configuration files says
-import sys
-cfgparser = ConfigParser.RawConfigParser()
-cfgparser.read("config.txt")
-pwb_location = cfgparser.get("configuration", "pwb_location")
-sys.path.append(pwb_location)
-try:
-    # pylint: disable=import-error
-    import pywikibot
-    from pywikibot.pagegenerators import CategorizedPageGenerator
-    import pywikibot.pagegenerators as pagegenerators
-except ImportError:
-    logging.critical("Unable to find pywikibot. Exiting...")
-    exit()
-
-# Now, import everything else
 import argparse
+import ConfigParser
 import datetime
 import functools
 import getpass
 import json
+import logging
 import operator
-import os
+import os.path
+# pylint: disable=import-error
+import pywikibot
+import pywikibot.pagegenerators as pagegenerators
 import re
-from fuzzywuzzy import fuzz
+import sys
 from bs4 import BeautifulSoup
-from clint.textui import progress
 from clint.textui import prompt
 
 # These last two are so I can actually edit stuff. TODO: make PWB edit stuff.
@@ -48,19 +24,6 @@ from clint.textui import prompt
 from wikitools.wiki import Wiki as WikitoolsWiki
 # pylint: disable=import-error
 from wikitools.page import Page as WikitoolsPage
-
-# Parse our args. Arrrrrrrghs.
-parser = argparse.ArgumentParser(prog="DYKNotifier",
-                                 description=\
-                                 "Notify editors of their DYK noms.")
-parser.add_argument("-i", "--interactive", action="store_true",
-                    help="Confirm before each edit.")
-parser.add_argument("-c", "--count", type=int, help="Notify at most n people.")
-args = parser.parse_args()
-
-# Globals. (Best practices FTW)
-g_wiki = pywikibot.Site("en", "wikipedia")
-g_people_to_notify = dict()
 
 # Configuration for the user-page-editing part.
 SUMMARY = u"[[Wikipedia:Bots/Requests for approval/APersonBot " +\
@@ -71,84 +34,113 @@ MESSAGE = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
 # And other configuration.
 ALREADY_NOTIFIED_FILE = "notified.json"
 NOMINATION_TEMPLATE = "Template:Did you know nominations/"
+BAD_TEXT = ur'(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DYK)'
 
 def main():
-    global g_wiki, g_people_to_notify
-    g_wiki.login()
-    get_people_to_notify()
-    prune_list_of_people()
-    notify_people()
+    "The main function."
+    init_logging()
+    args = parse_args()
+    people_to_notify = get_people_to_notify()
+    people_to_notify = prune_list_of_people(people_to_notify)
+    notify_people(people_to_notify, args)
+
+def init_logging():
+    "Initialize logging."
+    logging.basicConfig(filename='dyknotifier.log',
+                        level=logging.DEBUG,
+                        datefmt="%d %b. %Y %I:%M:%S",
+                        format="[%(asctime)s] [%(levelname)s] %(message)s")
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(stream_handler)
+
+def parse_args():
+    "Parse the arguments."
+    parser = argparse.ArgumentParser(prog="DYKNotifier",
+                                     description=\
+                                     "Notify editors of their DYK noms.")
+    parser.add_argument("-i", "--interactive", action="store_true",
+                        help="Confirm before each edit.")
+    parser.add_argument("-c", "--count", type=int,
+                        help="Notify at most n people.")
+    return parser.parse_args()
 
 def get_people_to_notify():
     """
-    Gets a dict of user talkpages to notify about their creations and
+    Returns a dict of user talkpages to notify about their creations and
     the noms about which they should be notified.
     """
-    global g_people_to_notify, g_wiki
-    cat_dykn = pywikibot.Category(g_wiki, "Category:Pending DYK nominations")
+    people_to_notify = dict()
+    wiki = pywikibot.Site("en", "wikipedia")
+    wiki.login()
+    cat_dykn = pywikibot.Category(wiki, "Category:Pending DYK nominations")
     logging.info("Getting nominations from " + cat_dykn.title() + "...")
-    BAD_TEXT = ur'(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DYK)'
-    for nomination in CategorizedPageGenerator(cat_dykn, content=True):
+    for nomination in pagegenerators.CategorizedPageGenerator(
+            cat_dykn, content=True):
         wikitext = nomination.get()
         if not re.search(re.compile(BAD_TEXT, re.I), wikitext):
             who_to_nominate = get_who_to_nominate(wikitext,
                                                   nomination.title())
-            for k, v in who_to_nominate.items():
-                g_people_to_notify[k] = g_people_to_notify.get(k, []) + [v]
+            for username, nomination in who_to_nominate.items():
+                people_to_notify[username] = people_to_notify.get(
+                    username, []) + [nomination]
 
-    logging.info("Found " + str(len(g_people_to_notify)) + " people to notify.")
+    logging.info("Found " + str(len(people_to_notify)) + " people to notify.")
+    return people_to_notify
 
-def prune_list_of_people():
+def prune_list_of_people(people_to_notify):
     "Removes people who shouldn't be notified from the list."
-    global g_people_to_notify
-    initial_count = len(g_people_to_notify)
 
     # Purely for logging purposes.
     def print_people_left(what_was_removed):
-        logging.info(str(len(g_people_to_notify)) + " people for " +\
+        "Print the number of people left after removing something."
+        logging.info(str(len(people_to_notify)) + " people for " +\
                      str(len(functools.reduce(operator.add,
-                                              g_people_to_notify.values()))) +\
+                                              people_to_notify.values()))) +\
                      " nominations left after removing " + what_was_removed +\
                      ".")
 
     # Prune empty entries
-    g_people_to_notify = {k: v for k, v in g_people_to_notify.items() if k}
+    people_to_notify = {k: v for k, v in people_to_notify.items() if k}
     print_people_left("empty entries")
 
     # Prune people I've already notified
-    with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
+    if os.path.isfile(ALREADY_NOTIFIED_FILE):
+        with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
 
-        # Since the outer dict in the file is keyed on month string,
-        # smush all the values together to get a dict keyed on username
-        already_notified = functools.reduce(merge_dicts,
-                                            json.load(
-                                                already_notified_file).values(),
-                                            {})
-        for username, nominations in already_notified.items():
-            if username not in g_people_to_notify: continue
-            nominations = map(lambda x:NOMINATION_TEMPLATE+x, nominations)
-            proposed = set(g_people_to_notify[username])
-            g_people_to_notify[username] = list(proposed - set(nominations))
-    print_people_left("already-notified people")
+            # Since the outer dict in the file is keyed on month string,
+            # smush all the values together to get a dict keyed on username
+            dict_list = json.load(already_notified_file).values()
+            already_notified = functools.reduce(merge_dicts, dict_list, {})
+            for username, nominations in already_notified.items():
+                if username not in people_to_notify:
+                    continue
+
+                nominations = [NOMINATION_TEMPLATE + x for x in nominations]
+                proposed = set(people_to_notify[username])
+                people_to_notify[username] = list(proposed - set(nominations))
+            print_people_left("already-notified people")
 
     # Prune user talk pages that link to this nom.
-    titles = ["User talk:" + username for username in g_people_to_notify.keys()]
+    titles = ["User talk:" + username for username in people_to_notify.keys()]
     titles_generator = pagegenerators.PagesFromTitlesGenerator(titles)
-    nom_iterable = zip(titles_generator, g_people_to_notify.values())
+    nom_iterable = zip(titles_generator, people_to_notify.values())
     for user_talk_page, nom_subpage_titles in nom_iterable:
         username = user_talk_page.title(withNamespace=False)
         for outgoing_link in user_talk_page.linkedPages(namespaces=10):
             outgoing_link_name = outgoing_link.title(withNamespace=True)
             if outgoing_link_name in nom_subpage_titles:
-                g_people_to_notify[username].remove(outgoing_link_name)
+                people_to_notify[username].remove(outgoing_link_name)
                 break # break out of the inner loop
     print_people_left("linked people")
 
-def notify_people():
-    global g_people_to_notify
+    return people_to_notify
+
+def notify_people(people_to_notify, args):
+    "Adds a message to people who ought to be notified about their DYK noms."
 
     # First, check if there's even someone to notify
-    if len(g_people_to_notify) == 0:
+    if len(people_to_notify) == 0:
         logging.info("Nobody to notify.")
         return
 
@@ -162,13 +154,14 @@ def notify_people():
         my_wiki.login(username, password)
         if my_wiki.isLoggedIn():
             break
-            logging.error("Error logging in. Try again.")
+        logging.error("Error logging in. Try again.")
     logging.info("Successfully logged in as " + my_wiki.username + ".")
 
     # Finally, do the notification
     people_notified = dict()
 
     def write_notified_to_file():
+        "Update the file of notified people with people_notified."
         now = datetime.datetime.now()
         now = now.strftime("%B") + " " + str(now.year)
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
@@ -188,13 +181,12 @@ def notify_people():
             len(functools.reduce(operator.add,
                                  already_notified_this_month.values()))))
 
-    for person, nom_names in g_people_to_notify.items():
-        for nom_name in map(lambda x:x[34:], nom_names):
-            person_ascii = person.encode("ascii", "replace")
-            nom_name_ascii = nom_name.encode("ascii", "replace")
+    for person, nom_names in people_to_notify.items():
+        for nom_name in [x[34:] for x in nom_names]:
             if args.count:
                 if len(people_notified) >= args.count:
-                    logging.info(str(num_notified) + " notified; exiting.")
+                    logging.info("{} notified; exiting.".format(
+                        len(people_notified)))
                     write_notified_to_file()
                     sys.exit(0)
 
@@ -252,10 +244,10 @@ def get_who_to_nominate(wikitext, title):
 
     soup = BeautifulSoup(wikitext)
     small_tags = [unicode(x.string) for x in soup.find_all("small")]
-    def is_nom_string(x):
-        "Is x the line in a DYK nom reading 'Created by... Nominated by...'?"
-        return u"Nominated by" in x
-    nom_lines = filter(is_nom_string, small_tags)
+    def is_nom_string(text):
+        "Is text the line in a DYK nom reading 'Created by... Nominated by...'?"
+        return u"Nominated by" in text
+    nom_lines = [tag for tag in small_tags if is_nom_string(tag)]
     if not len(nom_lines) == 1:
         logging.error(u"Small tags for " + title + u": " + unicode(small_tags))
         return {}
