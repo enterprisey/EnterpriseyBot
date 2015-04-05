@@ -16,6 +16,9 @@ def main():
     "The main function."
     wiki = pywikibot.Site("en", "wikipedia")
     wiki.login()
+    global wikitools_wiki
+    wikitools_login()
+
     wpgo = pywikibot.Page(wiki, "Wikipedia:Goings-on")
     wpgo_content = wpgo.get()
     new_fc = wpgo_content[wpgo_content.find("==New featured content=="):]
@@ -45,6 +48,22 @@ def main():
                                                                     label,
                                                                     date)]
 
+    # Get notification metadata
+    for fc_cat, fc_items in fc_cats.items():
+        def add_metadata(fc_item):
+            name, label, date = fc_item
+            nom_link = "Wikipedia:Featured " + fc_cat[:-1] + " candidates/"
+            if fc_cat == "pictures":
+                nom_link += label[2:-2] if "''" in label else label
+                #if not WikitoolsPage(wikitools_wiki, title=nom_link).exists:
+                if not wiki.page_exists(nom_link):
+                    print(nom_link + " DOESN'T EXIST")
+            else:
+                nom_link += name[2:-2] if "''" in name else name
+                nom_link += "/archive1"
+            return (name, label, date, nom_link)
+        fc_cats[fc_cat] = map(add_metadata, fc_items)
+
     # Build "report"
     report = ""
     for fc_cat, fc_items in fc_cats.items():
@@ -52,21 +71,12 @@ def main():
         report += "\n{} {} were promoted this week.".format(len(fc_items),
                                                             FC_LINKS[fc_cat])
         for fc_item in fc_items:
-            piped = "|"+fc_item[1] if fc_item[1] else ""
-            report += u"\n* '''[[{}{}]]'''".format(fc_item[0], piped)
+            name, label, date, nom_link = fc_item
+            piped = "|" + label if label else ""
+            report += u"\n* '''[[{}{}]]''' <small>([[{}|nominated]] by [[User:Example|Example]])</small> Description.".format(name, piped, nom_link)
     report = report.strip()
 
     # Write report to Wikipedia
-    wikitools_wiki = WikitoolsWiki("http://en.wikipedia.org/w/api.php")
-    while True:
-        username = raw_input("Username: ")
-        password = getpass.getpass("Password for " + username + " on enwiki: ")
-        print("Logging in to enwiki as " + username + "...")
-        wikitools_wiki.login(username, password)
-        if wikitools_wiki.isLoggedIn():
-            break
-        print("Error logging in. Try again.")
-    print("Successfully logged in as " + wikitools_wiki.username + ".")
     report_page = WikitoolsPage(wikitools_wiki, title="User:APersonBot/sandbox")
     print("Editing report page...")
     result = report_page.edit(text=report.encode("ascii", "ignore"),
@@ -76,6 +86,18 @@ def main():
         print "Success!"
     else:
         print "Error! Couldn't write report - result: {}".format(str(result))
+
+def wikitools_login():
+    global wikitools_wiki
+    wikitools_wiki = WikitoolsWiki("http://en.wikipedia.org/w/api.php")
+    while True:
+        username = raw_input("Username: ")
+        password = getpass.getpass("Password for " + username + " on enwiki: ")
+        print("Logging in to enwiki as " + username + "...")
+        wikitools_wiki.login(username, password)
+        if wikitools_wiki.isLoggedIn():
+            break
+        print("Error logging in. Try again.")
 
 if __name__ == "__main__":
     main()
