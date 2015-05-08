@@ -94,8 +94,8 @@ def prune_list_of_people(people_to_notify):
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
         nominations = functools.reduce(operator.add, people_to_notify.values())
-        logging.info("{} people for {} noms left after removing {}".format(
-            len(people_to_notify), len(nominations), what_was_removed))
+        logging.info("%d people for %d noms left after removing %s",
+                     people_to_notify, nominations, what_was_removed)
 
     # Prune empty entries
     people_to_notify = {k: v for k, v in people_to_notify.items() if k}
@@ -179,10 +179,10 @@ def notify_people(people_to_notify, args):
             already_notified[now] = already_notified_this_month
             json.dump(already_notified, already_notified_file)
 
-        logging.info("Wrote {} people for {} nominations this month.".format(
-            len(already_notified_this_month),
-            len(functools.reduce(operator.add,
-                                 already_notified_this_month.values(), []))))
+        logging.info("Wrote %d people for %d nominations this month.",
+            already_notified_this_month,
+            functools.reduce(operator.add,
+                             already_notified_this_month.values(), []))
 
     for person, nom_names in people_to_notify.items():
         for nom_name in [x[34:] for x in nom_names]:
@@ -190,7 +190,7 @@ def notify_people(people_to_notify, args):
                 edits_made = len(functools.reduce(operator.add,
                                                   people_notified.values(), []))
                 if edits_made >= args.count:
-                    logging.info("{} notified; exiting.".format(edits_made))
+                    logging.info("%d notified; exiting.", edits_made)
                     write_notified_people_to_file()
                     sys.exit(0)
 
