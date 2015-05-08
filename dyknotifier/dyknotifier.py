@@ -3,7 +3,6 @@ A module implementing a bot to notify editors when articles they create or
 expand are nominated for DYK by someone else.
 """
 import argparse
-import ConfigParser
 import datetime
 import functools
 import getpass
@@ -94,11 +93,9 @@ def prune_list_of_people(people_to_notify):
     # Purely for logging purposes.
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
-        logging.info(str(len(people_to_notify)) + " people for " +\
-                     str(len(functools.reduce(operator.add,
-                                              people_to_notify.values()))) +\
-                     " nominations left after removing " + what_was_removed +\
-                     ".")
+        nominations = functools.reduce(operator.add, people_to_notify.values())
+        logging.info("{} people for {} noms left after removing {}".format(
+            len(people_to_notify), len(nominations), what_was_removed))
 
     # Prune empty entries
     people_to_notify = {k: v for k, v in people_to_notify.items() if k}
@@ -123,23 +120,26 @@ def prune_list_of_people(people_to_notify):
 
     # Prune user talk pages that link to this nom.
     titles = ["User talk:" + username for username in people_to_notify.keys()]
-    titles_generator = pagegenerators.PagesFromTitlesGenerator(titles)
-    nom_iterable = zip(titles_generator, people_to_notify.values())
-    for user_talk_page, nom_subpage_titles in nom_iterable:
+    for user_talk_page in pagegenerators.PagesFromTitlesGenerator(titles):
+        if not user_talk_page.exists():
+            continue
+
         username = user_talk_page.title(withNamespace=False)
-        for outgoing_link in user_talk_page.linkedPages(namespaces=10):
-            outgoing_link_name = outgoing_link.title(withNamespace=True)
-            if outgoing_link_name in nom_subpage_titles:
-                people_to_notify[username].remove(outgoing_link_name)
-                break # break out of the inner loop
+        people_to_notify[username] = [nom for nom in people_to_notify[username]
+                                      if nom not in user_talk_page.get()]
+    people_to_notify = dict([(k, v) for k, v in people_to_notify.items() if v])
     print_people_left("linked people")
 
     return people_to_notify
 
+# Disabling pylint because breaking stuff out into
+# methods would spill too much into global scope
+
+# pylint: disable=too-many-branches
 def notify_people(people_to_notify, args):
     "Adds a message to people who ought to be notified about their DYK noms."
 
-    # First, check if there's even someone to notify
+    # First, check if there's anybody to notify
     if len(people_to_notify) == 0:
         logging.info("Nobody to notify.")
         return
@@ -160,34 +160,38 @@ def notify_people(people_to_notify, args):
     # Finally, do the notification
     people_notified = dict()
 
-    def write_notified_to_file():
-        "Update the file of notified people with people_notified."
+    def write_notified_people_to_file():
+        """Update the file of notified people with people_notified."""
         now = datetime.datetime.now()
         now = now.strftime("%B") + " " + str(now.year)
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
             already_notified = json.load(already_notified_file)
-        already_notified_this_month = already_notified.get(now, {})
-        with open(ALREADY_NOTIFIED_FILE, "w") as already_notified_file:
-            usernames = set(already_notified_this_month.keys() +
-                            people_notified.keys())
+
+            already_notified_this_month = already_notified.get(now, {})
+            with open(ALREADY_NOTIFIED_FILE, "w") as already_notified_file:
+                usernames = set(already_notified_this_month.keys() +
+                                people_notified.keys())
             for username in usernames:
                 already_notified_this_month[username] = list(set(
                     already_notified_this_month.get(username, []) +\
                     people_notified.get(username, [])))
+
             already_notified[now] = already_notified_this_month
             json.dump(already_notified, already_notified_file)
-        logging.info("Wrote {} people for {} nominations.".format(
+
+        logging.info("Wrote {} people for {} nominations this month.".format(
             len(already_notified_this_month),
             len(functools.reduce(operator.add,
-                                 already_notified_this_month.values()))))
+                                 already_notified_this_month.values(), []))))
 
     for person, nom_names in people_to_notify.items():
         for nom_name in [x[34:] for x in nom_names]:
             if args.count:
-                if len(people_notified) >= args.count:
-                    logging.info("{} notified; exiting.".format(
-                        len(people_notified)))
-                    write_notified_to_file()
+                edits_made = len(functools.reduce(operator.add,
+                                                  people_notified.values(), []))
+                if edits_made >= args.count:
+                    logging.info("{} notified; exiting.".format(edits_made))
+                    write_notified_people_to_file()
                     sys.exit(0)
 
             if args.interactive:
@@ -202,15 +206,13 @@ def notify_people(people_to_notify, args):
                     continue
                 elif choice[0] == "q":
                     logging.info("Stop requested; exiting.")
-                    write_notified_to_file()
+                    write_notified_people_to_file()
                     sys.exit(0)
             talkpage = WikitoolsPage(my_wiki, title="User talk:" + person)
-            text_to_add = MESSAGE.format(nom_name)
-            edit_summary = SUMMARY.format(nom_name)
             try:
-                result = talkpage.edit(appendtext=text_to_add,
+                result = talkpage.edit(appendtext=MESSAGE.format(nom_name),
                                        bot=True,
-                                       summary=edit_summary)
+                                       summary=SUMMARY.format(nom_name))
                 if result[u"edit"][u"result"] == u"Success":
                     logging.info("Success! Notified " + person +\
                                  " because of " + nom_name + ".")
@@ -221,12 +223,14 @@ def notify_people(people_to_notify, args):
                                   " because of " + nom_name + " - result: " +\
                                   str(result))
             except (KeyboardInterrupt, SystemExit):
-                write_notified_to_file()
+                write_notified_people_to_file()
                 raise
-            except:
-                logging.error(u"Error notifying " + unicode(person) + u": " +\
+            except UnicodeEncodeError:
+                logging.error(u"Unicode encoding error notifying " +\
+                              unicode(person) +\
+                              u"about" + unicode(nom_name) + u": " +\
                               unicode(sys.exc_info()[1]))
-    write_notified_to_file()
+    write_notified_people_to_file()
 
 def get_who_to_nominate(wikitext, title):
     """
