@@ -106,16 +106,17 @@ def prune_list_of_people(people_to_notify):
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
             try:
                 already_notified_data = json.load(already_notified_file)
-            except ValueError as e:
-                if e.message != "No JSON object could be decoded":
+            except ValueError as error:
+                if error.message != "No JSON object could be decoded":
                     raise
                 else:
                     already_notified_data = {}
 
             # Since the outer dict in the file is keyed on month string,
             # smush all the values together to get a dict keyed on username
-            dict_list = already_notified_data.values()
-            already_notified = functools.reduce(merge_dicts, dict_list, {})
+            already_notified = functools.reduce(merge_dicts,
+                                                already_notified_data.values(),
+                                                {})
             for username, nominations in already_notified.items():
                 if username not in people_to_notify:
                     continue
@@ -123,7 +124,7 @@ def prune_list_of_people(people_to_notify):
                 nominations = [NOMINATION_TEMPLATE + x for x in nominations]
                 proposed = set(people_to_notify[username])
                 people_to_notify[username] = list(proposed - set(nominations))
-                print_people_left("already-notified people")
+            print_people_left("already-notified people")
 
     # Prune user talk pages that link to this nom.
     titles = ["User talk:" + username for username in people_to_notify.keys()]
@@ -172,13 +173,13 @@ def notify_people(people_to_notify, args):
 
     def write_notified_people_to_file():
         """Update the file of notified people with people_notified."""
-        now = datetime.datetime.now()
-        now = now.strftime("%B") + " " + str(now.year)
+        now = datetime.datetime.now().strftime("%B") + " " +\
+              str(datetime.datetime.now().year)
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
             try:
                 already_notified = json.load(already_notified_file)
-            except ValueError as e:
-                if e.message != "No JSON object could be decoded":
+            except ValueError as error:
+                if error.message != "No JSON object could be decoded":
                     raise
                 else:
                     already_notified = {} # eh, we'll be writing to it anyway
@@ -196,9 +197,10 @@ def notify_people(people_to_notify, args):
                 json.dump(already_notified, already_notified_file)
 
         logging.info("Wrote %d people for %d nominations this month.",
-            len(already_notified_this_month),
-            len(functools.reduce(operator.add,
-                                 already_notified_this_month.values(), [])))
+                     len(already_notified_this_month),
+                     len(functools.reduce(operator.add,
+                                          already_notified_this_month.values(),
+                                          [])))
 
     for person, nom_names in people_to_notify.items():
         for nom_name in [x[34:] for x in nom_names]:
