@@ -84,7 +84,7 @@ def get_people_to_notify():
                 people_to_notify[username] = people_to_notify.get(
                     username, []) + [nomination]
 
-    logging.info("Found " + str(len(people_to_notify)) + " people to notify.")
+    logging.info("Found %d people to notify.", len(people_to_notify))
     return people_to_notify
 
 def prune_list_of_people(people_to_notify):
@@ -94,8 +94,8 @@ def prune_list_of_people(people_to_notify):
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
         nominations = functools.reduce(operator.add, people_to_notify.values())
-        logging.info("%d people for %d noms left after removing %s",
-                     people_to_notify, nominations, what_was_removed)
+        logging.info("%d people for %d noms left after removing %s.",
+                     len(people_to_notify), len(nominations), what_was_removed)
 
     # Prune empty entries
     people_to_notify = {k: v for k, v in people_to_notify.items() if k}
@@ -104,10 +104,17 @@ def prune_list_of_people(people_to_notify):
     # Prune people I've already notified
     if os.path.isfile(ALREADY_NOTIFIED_FILE):
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
+            try:
+                already_notified_data = json.load(already_notified_file)
+            except ValueError as e:
+                if e.message != "No JSON object could be decoded":
+                    raise
+                else:
+                    already_notified_data = {}
 
             # Since the outer dict in the file is keyed on month string,
             # smush all the values together to get a dict keyed on username
-            dict_list = json.load(already_notified_file).values()
+            dict_list = already_notified_data.values()
             already_notified = functools.reduce(merge_dicts, dict_list, {})
             for username, nominations in already_notified.items():
                 if username not in people_to_notify:
@@ -116,15 +123,18 @@ def prune_list_of_people(people_to_notify):
                 nominations = [NOMINATION_TEMPLATE + x for x in nominations]
                 proposed = set(people_to_notify[username])
                 people_to_notify[username] = list(proposed - set(nominations))
-            print_people_left("already-notified people")
+                print_people_left("already-notified people")
 
     # Prune user talk pages that link to this nom.
     titles = ["User talk:" + username for username in people_to_notify.keys()]
     for user_talk_page in pagegenerators.PagesFromTitlesGenerator(titles):
-        if not user_talk_page.exists():
+        if not user_talk_page.exists() or user_talk_page.isRedirectPage():
             continue
 
         username = user_talk_page.title(withNamespace=False)
+        if not username in people_to_notify:
+            continue
+
         people_to_notify[username] = [nom for nom in people_to_notify[username]
                                       if nom not in user_talk_page.get()]
     people_to_notify = dict([(k, v) for k, v in people_to_notify.items() if v])
@@ -165,24 +175,30 @@ def notify_people(people_to_notify, args):
         now = datetime.datetime.now()
         now = now.strftime("%B") + " " + str(now.year)
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
-            already_notified = json.load(already_notified_file)
+            try:
+                already_notified = json.load(already_notified_file)
+            except ValueError as e:
+                if e.message != "No JSON object could be decoded":
+                    raise
+                else:
+                    already_notified = {} # eh, we'll be writing to it anyway
 
             already_notified_this_month = already_notified.get(now, {})
             with open(ALREADY_NOTIFIED_FILE, "w") as already_notified_file:
                 usernames = set(already_notified_this_month.keys() +
                                 people_notified.keys())
-            for username in usernames:
-                already_notified_this_month[username] = list(set(
-                    already_notified_this_month.get(username, []) +\
-                    people_notified.get(username, [])))
+                for username in usernames:
+                    already_notified_this_month[username] = list(set(
+                        already_notified_this_month.get(username, []) +\
+                        people_notified.get(username, [])))
 
-            already_notified[now] = already_notified_this_month
-            json.dump(already_notified, already_notified_file)
+                already_notified[now] = already_notified_this_month
+                json.dump(already_notified, already_notified_file)
 
         logging.info("Wrote %d people for %d nominations this month.",
-            already_notified_this_month,
-            functools.reduce(operator.add,
-                             already_notified_this_month.values(), []))
+            len(already_notified_this_month),
+            len(functools.reduce(operator.add,
+                                 already_notified_this_month.values(), [])))
 
     for person, nom_names in people_to_notify.items():
         for nom_name in [x[34:] for x in nom_names]:
