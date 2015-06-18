@@ -90,12 +90,30 @@ def get_people_to_notify():
 def prune_list_of_people(people_to_notify):
     "Removes people who shouldn't be notified from the list."
 
-    # Purely for logging purposes.
+    # Define a couple of helper functions...
+
+    # ... one purely for logging purposes,
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
         nominations = functools.reduce(operator.add, people_to_notify.values())
         logging.info("%d people for %d noms left after removing %s.",
                      len(people_to_notify), len(nominations), what_was_removed)
+
+    # ... and another simply to save keystrokes.
+    def user_talk_pages():
+        titles = ["User talk:" + username for username in people_to_notify.keys()]
+        for user_talk_page in pagegenerators.PagesFromTitlesGenerator(titles):
+
+            # First, some sanity checks
+            if not user_talk_page.exists() or user_talk_page.isRedirectPage():
+                continue
+
+            username = user_talk_page.title(withNamespace=False)
+            if not username in people_to_notify:
+                continue
+
+            # Then yield the page and username
+            yield (user_talk_page, username)
 
     # Prune empty entries
     people_to_notify = {k: v for k, v in people_to_notify.items() if k}
@@ -127,19 +145,17 @@ def prune_list_of_people(people_to_notify):
             print_people_left("already-notified people")
 
     # Prune user talk pages that link to this nom.
-    titles = ["User talk:" + username for username in people_to_notify.keys()]
-    for user_talk_page in pagegenerators.PagesFromTitlesGenerator(titles):
-        if not user_talk_page.exists() or user_talk_page.isRedirectPage():
-            continue
-
-        username = user_talk_page.title(withNamespace=False)
-        if not username in people_to_notify:
-            continue
-
+    for user_talk_page, username in user_talk_pages():
         people_to_notify[username] = [nom for nom in people_to_notify[username]
                                       if nom not in user_talk_page.get()]
     people_to_notify = dict([(k, v) for k, v in people_to_notify.items() if v])
     print_people_left("linked people")
+
+    # Prune based on exclusion compliance
+    for user_talk_page, username in user_talk_pages():
+        if not user_talk_page.botMayEdit():
+            del people_to_notify[username]
+    print_people_left("people who are excluding this bot")
 
     return people_to_notify
 
@@ -246,7 +262,7 @@ def notify_people(people_to_notify, args):
             except UnicodeEncodeError:
                 logging.error(u"Unicode encoding error notifying " +\
                               unicode(person) +\
-                              u"about" + unicode(nom_name) + u": " +\
+                              u" about " + unicode(nom_name) + u": " +\
                               unicode(sys.exc_info()[1]))
     write_notified_people_to_file()
 
