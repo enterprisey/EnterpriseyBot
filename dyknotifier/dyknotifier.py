@@ -28,7 +28,6 @@ from wikitools.page import Page as WikitoolsPage
 SUMMARY = u"[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                 "2|Bot]] notification about the DYK nomination of" +\
                 " {0}."
-MESSAGE = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
 
 # And other configuration.
 ALREADY_NOTIFIED_FILE = "notified.json"
@@ -142,13 +141,14 @@ def prune_list_of_people(people_to_notify):
                 nominations = [NOMINATION_TEMPLATE + x for x in nominations]
                 proposed = set(people_to_notify[username])
                 people_to_notify[username] = list(proposed - set(nominations))
+            people_to_notify = {k: v for k, v in people_to_notify.items() if v}
             print_people_left("already-notified people")
 
     # Prune user talk pages that link to this nom.
     for user_talk_page, username in user_talk_pages():
         people_to_notify[username] = [nom for nom in people_to_notify[username]
                                       if nom not in user_talk_page.get()]
-    people_to_notify = dict([(k, v) for k, v in people_to_notify.items() if v])
+    people_to_notify = {k: v for k, v in people_to_notify.items() if v}
     print_people_left("linked people")
 
     # Prune based on exclusion compliance
@@ -219,51 +219,63 @@ def notify_people(people_to_notify, args):
                                           [])))
 
     for person, nom_names in people_to_notify.items():
-        for nom_name in [x[34:] for x in nom_names]:
-            if args.count:
-                edits_made = len(functools.reduce(operator.add,
-                                                  people_notified.values(), []))
-                if edits_made >= args.count:
-                    logging.info("%d notified; exiting.", edits_made)
-                    write_notified_people_to_file()
-                    sys.exit(0)
-
-            if args.interactive:
-                logging.info("About to notify " + person + " for " +\
-                             nom_name + ".")
-                choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
-                if choice[0] == "s":
-                    if prompt.yn("Because I've already notified them?"):
-                        people_notified[person] = people_notified.get(
-                            person, []) + [nom_name]
-                    logging.info("Skipping " + person + ".")
-                    continue
-                elif choice[0] == "q":
-                    logging.info("Stop requested; exiting.")
-                    write_notified_people_to_file()
-                    sys.exit(0)
-            talkpage = WikitoolsPage(my_wiki, title="User talk:" + person)
-            try:
-                result = talkpage.edit(appendtext=MESSAGE.format(nom_name),
-                                       bot=True,
-                                       summary=SUMMARY.format(nom_name))
-                if result[u"edit"][u"result"] == u"Success":
-                    logging.info("Success! Notified " + person +\
-                                 " because of " + nom_name + ".")
-                    people_notified[person] = people_notified.get(person, []) +\
-                                              [nom_name]
-                else:
-                    logging.error("Couldn't notify " + person +\
-                                  " because of " + nom_name + " - result: " +\
-                                  str(result))
-            except (KeyboardInterrupt, SystemExit):
+        if args.count:
+            edits_made = len(functools.reduce(operator.add,
+                                              people_notified.values(), []))
+            if edits_made >= args.count:
+                logging.info("%d notified; exiting.", edits_made)
                 write_notified_people_to_file()
-                raise
-            except UnicodeEncodeError:
-                logging.error(u"Unicode encoding error notifying " +\
-                              unicode(person) +\
-                              u" about " + unicode(nom_name) + u": " +\
-                              unicode(sys.exc_info()[1]))
+                sys.exit(0)
+
+        # Prune non-ASCII nom names. Why? Because wikitools.
+        ascii = lambda string:all(ord(c) < 128 for c in string)
+        non_ascii_noms = [nom for nom in nom_names if not ascii(nom)]
+        if non_ascii_noms:
+            logging.error("Can't notify %s for %s because of Unicode issues." %
+                          (person, ", ".join(non_ascii_noms)))
+        nom_names = list(set(nom_names) - set(non_ascii_noms))
+        if not nom_names: continue
+
+        # Remove namespaces from the nom names.
+        nom_names = [name[34:] for name in nom_names]
+
+        if args.interactive:
+            logging.info("About to notify " + person + " for " +\
+                         ", ".join(nom_names) + ".")
+            choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
+            if choice[0] == "s":
+                if prompt.yn("Because I've already notified them?"):
+                    people_notified[person] = people_notified.get(
+                        person, []) + nom_names
+                logging.info("Skipping " + person + ".")
+                continue
+            elif choice[0] == "q":
+                logging.info("Stop requested; exiting.")
+                write_notified_people_to_file()
+                sys.exit(0)
+        talkpage = WikitoolsPage(my_wiki, title="User talk:" + person)
+        try:
+            summary = SUMMARY.format(", ".join(nom_names))
+            result = talkpage.edit(appendtext=generate_message(nom_names),
+                                   bot=True,
+                                   summary=summary)
+            if result[u"edit"][u"result"] == u"Success":
+                logging.info("Success! Notified " + person +\
+                             " because of " + ", ".join(nom_names) + ".")
+                people_notified[person] = people_notified.get(person, []) +\
+                                          nom_names
+            else:
+                logging.error("Couldn't notify " + person +\
+                              " because of " + ", ".join(nom_names) +
+                              " - result: " + str(result))
+        except (KeyboardInterrupt, SystemExit):
+            write_notified_people_to_file()
+            raise
+        except UnicodeEncodeError:
+            logging.error(u"Unicode encoding error notifying " +\
+                          unicode(person) +\
+                          u" about " + unicode(", ".join(nom_names)) +
+                          u": " + unicode(sys.exc_info()[1]))
     write_notified_people_to_file()
 
 def get_who_to_nominate(wikitext, title):
@@ -323,6 +335,16 @@ def usernames_from_text_with_sigs(wikitext):
     "Returns the users whose talk pages are linked to in the wikitext."
     return [wikitext[m.end():m.end()+wikitext[m.end():].find("|")]\
             for m in re.finditer(r"User talk:", wikitext)]
+
+def generate_message(nom_names):
+    MESSAGE = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
+    MULTIPLE_MESSAGE = "\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
+    ITEM = "* [[{0}]] ([[Template:Did you know nominations/{0}|discussion]])"
+    if len(nom_names) == 1:
+        return "".join([MESSAGE.format(nom) for nom in nom_names])
+    else:
+        wikitext_list = "\n".join([ITEM.format(nom) for nom in nom_names])
+        return MULTIPLE_MESSAGE.format(wikitext_list)
 
 # From http://stackoverflow.com/a/26853961/1757964
 def merge_dicts(*dict_args):
