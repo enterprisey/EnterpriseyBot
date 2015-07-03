@@ -19,7 +19,15 @@ def main():
     global wiki
     wiki = pywikibot.Site("en", "wikipedia")
     wiki.login()
-    for list_function in [list4]:
+
+    # Use list_regex to make a few lists
+    list4 = lambda:list_regex(".*\(.*Album.*\)")
+    list5 = lambda:list_regex("((are|is|it|my|our|that|their|this)+)|\((A|An|And|At|For|From|In|Into|Of|On|Or|The|To|With)+\)")
+    list4.__name__, list5.__name__ = "list4", "list5"
+
+    lists_to_make = [list4, list5]
+
+    for list_function in lists_to_make:
         function_name = list_function.__name__
         print
         logging.info("Starting work on %s" % function_name)
@@ -27,6 +35,10 @@ def main():
         wikitext_list = build_wikitext_list(article_list)
         with open(function_name + ".txt", "w") as text_file:
             text_file.write(wikitext_list)
+        target_page = pywikibot.Page(wiki, title="User:APersonBot/sandbox/" +
+                                     function_name)
+        target_page.save(text=wikitext_list,
+                         comment="Bot updating maintenance list for WP:ALBUMS")
 
 def list3():
     "This is a list of album articles without infoboxes."
@@ -64,23 +76,26 @@ def list3():
 
     return album_pages
 
-def list4():
-    'Gets a list of album pages with "Album" in their name'
+def list_regex(expression):
+    'Gets a list of album pages with whose names match the regex in their name'
     global wiki
     wikiproject_template = pywikibot.Page(wiki, "Template:WikiProject Albums")
     album_pages = wikiproject_template.getReferences(onlyTemplateInclusion=True)
     logging.info("Got a generator of album pages.")
-    album_pages = [page.title(withNamespace=True) for page in album_pages]
-    logging.info("Turned that into a list of %d titles." % len(album_pages))
+    album_titles = []
+    for page in progress.mill(album_pages, expected_size=200000,
+                              label="Converting "):
+        album_titles.append(page.title(withNamespace=True))
+    logging.info("Turned that into a list of %d titles." % len(album_titles))
 
-    INCORRECT = re.compile("\(.*Album.*\)")
+    INCORRECT = re.compile(expression)
     incorrect_pages = []
-    for page_title in progress.bar(album_pages, label="list4 "):
+    for page_title in progress.bar(album_titles, label="Filtering "):
         if INCORRECT.match(page_title):
             incorrect_pages.append(page_title)
 
     to_be_removed = []
-    for page_title in progress.bar(incorrect_pages, label="Internal "):
+    for page_title in progress.bar(incorrect_pages, label="-Internal "):
         page = pywikibot.Page(wiki, page_title)
         category_titles = [x.title() for x in page.categories()]
         if "Category:Project-Class Album articles" in category_titles:
