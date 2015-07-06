@@ -69,6 +69,7 @@ def get_people_to_notify():
     the noms about which they should be notified.
     """
     people_to_notify = dict()
+    global wiki
     wiki = pywikibot.Site("en", "wikipedia")
     wiki.login()
     cat_dykn = pywikibot.Category(wiki, "Category:Pending DYK nominations")
@@ -165,26 +166,14 @@ def prune_list_of_people(people_to_notify):
 # pylint: disable=too-many-branches
 def notify_people(people_to_notify, args):
     "Adds a message to people who ought to be notified about their DYK noms."
+    global wiki
 
-    # First, check if there's anybody to notify
+    # Check if there's anybody to notify
     if len(people_to_notify) == 0:
         logging.info("Nobody to notify.")
         return
 
-    my_wiki = WikitoolsWiki("http://en.wikipedia.org/w/api.php")
-
-    # Then, login
-    while True:
-        username = raw_input("Username: ")
-        password = getpass.getpass("Password for " + username + " on enwiki: ")
-        logging.info("Logging in to enwiki as " + username + "...")
-        my_wiki.login(username, password)
-        if my_wiki.isLoggedIn():
-            break
-        logging.error("Error logging in. Try again.")
-    logging.info("Successfully logged in as " + my_wiki.username + ".")
-
-    # Finally, do the notification
+    # Do the notification
     people_notified = dict()
 
     def write_notified_people_to_file():
@@ -227,15 +216,6 @@ def notify_people(people_to_notify, args):
                 write_notified_people_to_file()
                 sys.exit(0)
 
-        # Prune non-ASCII nom names. Why? Because wikitools.
-        ascii = lambda string:all(ord(c) < 128 for c in string)
-        non_ascii_noms = [nom for nom in nom_names if not ascii(nom)]
-        if non_ascii_noms:
-            logging.error("Can't notify %s for %s because of Unicode issues." %
-                          (person, ", ".join(non_ascii_noms)))
-        nom_names = list(set(nom_names) - set(non_ascii_noms))
-        if not nom_names: continue
-
         # Remove namespaces from the nom names.
         nom_names = [name[34:] for name in nom_names]
 
@@ -253,21 +233,19 @@ def notify_people(people_to_notify, args):
                 logging.info("Stop requested; exiting.")
                 write_notified_people_to_file()
                 sys.exit(0)
-        talkpage = WikitoolsPage(my_wiki, title="User talk:" + person)
+        talkpage = pywikibot.Page(wiki, title="User talk:" + person)
         try:
             summary = SUMMARY.format(", ".join(nom_names))
-            result = talkpage.edit(appendtext=generate_message(nom_names),
-                                   bot=True,
-                                   summary=summary)
-            if result[u"edit"][u"result"] == u"Success":
-                logging.info("Success! Notified " + person +\
-                             " because of " + ", ".join(nom_names) + ".")
-                people_notified[person] = people_notified.get(person, []) +\
-                                          nom_names
-            else:
-                logging.error("Couldn't notify " + person +\
-                              " because of " + ", ".join(nom_names) +
-                              " - result: " + str(result))
+            talkpage.save(appendtext=generate_message(nom_names),
+                          comment=summary)
+            logging.info("Success! Notified " + person +\
+                         " because of " + ", ".join(nom_names) + ".")
+            people_notified[person] = people_notified.get(person,
+                                                          []) + nom_names
+        except pywikibot.Error as e:
+            logging.error("Couldn't notify " + person +\
+                          " because of " + ", ".join(nom_names) +
+                          " - result: " + str(e))
         except (KeyboardInterrupt, SystemExit):
             write_notified_people_to_file()
             raise
