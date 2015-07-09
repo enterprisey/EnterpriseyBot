@@ -20,8 +20,10 @@ pywikibot.lwp
 config.txt
 
 # A JSON dump from the pwb file
-dyknotifier_list.json
 notified.json
+
+# From the albumlists task
+list*.txt
 
 #############
 ## Windows detritus

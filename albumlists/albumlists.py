@@ -2,6 +2,7 @@
 A bot to help WP:ALBUM with some lists.
 """
 import argparse
+from datetime import date
 from itertools import groupby
 import logging
 from operator import itemgetter
@@ -22,10 +23,13 @@ def main():
 
     # Use list_regex to make a few lists
     list4 = lambda:list_regex(".*\(.*Album.*\)")
-    list5 = lambda:list_regex("((are|is|it|my|our|that|their|this)+)|\((A|An|And|At|For|From|In|Into|Of|On|Or|The|To|With)+\)")
-    list4.__name__, list5.__name__ = "list4", "list5"
+    list5 = lambda:list_regex(".*(\s(are|is|it|my|our|that|their|this)\s)|[\w ]+" +
+                              "(\s(A|An|And|At|For|From|In|Into|Of|On|Or|The|To|With)\s).*")
+    list6 = lambda:list_category("All disputed non-free Wikipedia files")
+    list7 = lambda:list_category("All Wikipedia files with no non-free use rationale")
+    list4.__name__, list5.__name__, list6.__name__, list7.__name__ = "list4", "list5", "list6", "list7"
 
-    lists_to_make = [list4, list5]
+    lists_to_make = [list4, list5, list6, list7]
 
     for list_function in lists_to_make:
         function_name = list_function.__name__
@@ -114,7 +118,47 @@ def list_regex(expression):
 
     return incorrect_pages
 
-def build_wikitext_list(pages):
+def list_category(category_name):
+    'Gets a list of album covers that intersect with the specified category'
+    album_covers_cat = pywikibot.Category(wiki, title="Category:Album covers")
+    category_name = (category_name if category_name.startswith("Category:")
+                     else "Category:" + category_name)
+    other_cat = pywikibot.Category(wiki, title=category_name)
+
+    # Get a list of album covers
+    album_covers = []
+    num_album_covers = album_covers_cat.categoryinfo["files"]
+    for album_cover in progress.bar(album_covers_cat.articles(),
+                                    label="Getting titles ",
+                                    expected_size=num_album_covers):
+        album_covers.append(album_cover.title(withNamespace=False))
+    album_covers = key_on_first_letter(album_covers)
+
+    # Get a list of other images
+    num_other = other_cat.categoryinfo["files"]
+    other_list = []
+    for other in progress.bar(other_cat.articles(),
+                              label="Getting other titles ",
+                              expected_size=num_other):
+        other_list.append(other.title(withNamespace=False))
+    other_dict = key_on_first_letter(other_list)
+
+    # Get that intersection
+    result_list = {}
+    for letter in progress.bar(album_covers,
+                               label="Intersecting "):
+        if letter not in other_dict:
+            continue
+
+        for album_cover in album_covers[letter]:
+            if album_cover in other_dict[letter]:
+                result_list[letter] = result_list.get(letter, []) +\
+                                      [album_cover]
+                other_dict[letter].remove(album_cover)
+
+    return result_list
+
+def build_wikitext_list(pages, force_no_key=False):
 
     # Flat lists more than 15 pages long get keyed on first letter
     if isinstance(pages, list) and len(pages) > 15:
@@ -126,9 +170,13 @@ def build_wikitext_list(pages):
         return "".join(["\n* [[%s]]" % page for page in pages])
 
 def build_wikitext_list_from_dict(pages):
-    wikitext_list = ""
+    wikitext_list = "Last updated: " + date.strftime(date.today(), "%-d %B %Y")
+
+    if not pages:
+        return wikitext_list + "\n\n(no items)"
+
     bar_label = "Building a list "
-    for letter, pages in progress.bar(pages.items(), label=bar_label):
+    for letter, pages in progress.bar(sorted(pages.items()), label=bar_label):
         wikitext_list += "\n\n=== %s ===" % letter
         for page in pages:
             wikitext_list += "\n* [[%s]]" % page
