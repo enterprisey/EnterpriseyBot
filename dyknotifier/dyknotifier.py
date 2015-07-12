@@ -95,7 +95,8 @@ def prune_list_of_people(people_to_notify):
     # ... one purely for logging purposes,
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
-        nominations = functools.reduce(operator.add, people_to_notify.values())
+        nominations = functools.reduce(operator.add,
+                                       people_to_notify.values(), [])
         logging.info("%d people for %d noms left after removing %s.",
                      len(people_to_notify), len(nominations), what_was_removed)
 
