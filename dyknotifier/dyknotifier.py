@@ -18,12 +18,6 @@ import sys
 from bs4 import BeautifulSoup
 from clint.textui import prompt
 
-# These last two are so I can actually edit stuff. TODO: make PWB edit stuff.
-# pylint: disable=import-error
-from wikitools.wiki import Wiki as WikitoolsWiki
-# pylint: disable=import-error
-from wikitools.page import Page as WikitoolsPage
-
 # Configuration for the user-page-editing part.
 SUMMARY = u"[[Wikipedia:Bots/Requests for approval/APersonBot " +\
                 "2|Bot]] notification about the DYK nomination of" +\
