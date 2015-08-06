@@ -5,3 +5,4 @@ install: "pip install nose pylint"
 script: "nosetests && pylint dyknotifier/dyknotifier.py"
 notifications:
 - email: false
+sudo: false
