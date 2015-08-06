@@ -4,9 +4,11 @@ A bot to help WP:ALBUM with some lists.
 import argparse
 from datetime import date
 from itertools import groupby
+import json
 import logging
 from operator import itemgetter
 import os
+import os.path
 import re
 import string
 
@@ -22,23 +24,31 @@ def main():
     wiki.login()
 
     # Use list_regex to make a few lists
-    list4 = lambda:list_regex(".*\(.*Album.*\)")
-    list5 = lambda:list_regex(".*(\s(are|is|it|my|our|that|their|this)\s)|[\w ]+" +
-                              "(\s(A|An|And|At|For|From|In|Into|Of|On|Or|The|To|With)\s).*")
-    list6 = lambda:list_category("All disputed non-free Wikipedia files")
-    list7 = lambda:list_category("All Wikipedia files with no non-free use rationale")
+    list4 = lambda: list_regex(r".*\(.*Album.*\)")
+    list5 = lambda: list_regex(r".*(\s(are|is|it|my|our|that|their|this)\s)|[\w ]+" +
+                              r"(\s(A|An|And|At|For|From|In|Into|Of|On|Or|The|To|With)\s).*")
+    list6 = lambda: list_category("All disputed non-free Wikipedia files")
+    list7 = lambda: list_category("All Wikipedia files with no non-free use rationale")
     list4.__name__, list5.__name__, list6.__name__, list7.__name__ = "list4", "list5", "list6", "list7"
 
-    lists_to_make = [list4, list5, list6, list7]
+    # Parse args to find out which lists
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--lists", nargs="+", type=int, required=True,
+                        help="The numbers of the lists to make.")
+    args = parser.parse_args()
+    logging.info("Going to make " +
+                 list_to_description(["list " + str(x) for x in args.lists]))
+    list_functions = {3: list3, 4: list4, 5: list5, 6: list6, 7: list7}
 
-    for list_function in lists_to_make:
+    for list_number in args.lists:
+        list_function = list_functions[list_number]
         function_name = list_function.__name__
         print
         logging.info("Starting work on %s" % function_name)
         article_list = list_function()
         wikitext_list = build_wikitext_list(article_list)
         with open(function_name + ".txt", "w") as text_file:
-            text_file.write(wikitext_list)
+            text_file.write(wikitext_list.encode("utf-8"))
         target_page = pywikibot.Page(wiki, title="User:APersonBot/sandbox/" +
                                      function_name)
         target_page.save(text=wikitext_list,
@@ -48,24 +58,36 @@ def list3():
     "This is a list of album articles without infoboxes."
     global wiki
 
-    keyed_pages = {}
-    for template_name in ["Template:WikiProject Albums",
-                          "Template:Infobox album"]:
-        template = pywikibot.Page(wiki, template_name)
-        logging.info("Initialized an object for %s" % template_name)
-        template_pages = template.getReferences(onlyTemplateInclusion=True)
-        logging.info("Got a generator of pages transcluding %s" % template_name)
-        template_page_titles = [page.title(withNamespace=False)
-                                for page in template_pages]
-        logging.info("Turned that list into a list of %d titles." % len(template_page_titles))
-        template_page_titles = key_on_first_letter(template_page_titles)
-        logging.info("Keyed that list on title, forming a %d-key dict."
-                     % len(template_page_titles))
-        keyed_pages[template_name] = template_page_titles
-        print
+    FORCE_CACHE_RELOAD = False
 
-    album_pages = keyed_pages["Template:WikiProject Albums"]
-    infoboxed_pages = keyed_pages["Template:Infobox album"]
+    if (not os.path.exists("m")) or FORCE_CACHE_RELOAD:
+        keyed_pages = {}
+        for template_name in ["Template:WikiProject Albums",
+                              "Template:Infobox album"]:
+            template = pywikibot.Page(wiki, template_name)
+            logging.info("Initialized an object for %s" % template_name)
+            template_pages = template.getReferences(onlyTemplateInclusion=True)
+            logging.info("Got a generator of pages transcluding %s" % template_name)
+            template_page_titles = []
+            for page in progress.mill(template_pages, expected_size=200000,
+                                      label="Converting "):
+                template_page_titles.append(page.title(withNamespace=False))
+            logging.info("Turned that list into a list of %d titles." % len(template_page_titles))
+            template_page_titles = key_on_first_letter(template_page_titles)
+            logging.info("Keyed that list on title, forming a %d-key dict."
+                         % len(template_page_titles))
+            keyed_pages[template_name] = template_page_titles
+            with open(template_name[-1], "w") as cache:
+                json.dump(template_page_titles, cache)
+            print
+
+        album_pages = keyed_pages["Template:WikiProject Albums"]
+        infoboxed_pages = keyed_pages["Template:Infobox album"]
+    else:
+        with open("s", "r") as cache:
+            album_pages = json.load(cache)
+        with open("m", "r") as cache:
+            infoboxed_pages = json.load(cache)
 
     logging.info("Removing album pages that already have infoboxes...")
     for letter in progress.bar(album_pages):
@@ -76,6 +98,7 @@ def list3():
             if album in infoboxed_pages[letter]:
                 album_pages[letter].remove(album)
                 infoboxed_pages[letter].remove(album)
+
     logging.info("Done removing album pages with infoboxes!")
 
     return album_pages
@@ -200,6 +223,11 @@ def key_on_first_letter(the_list):
     """
     groupby_object = groupby(sorted(the_list), key=itemgetter(0))
     return {key: list(value) for key, value in groupby_object}
+
+def list_to_description(the_list):
+    return ", ".join(map(str, the_list[:-1])) +\
+        (" and " if len(the_list) > 1 else "") +\
+        str(the_list[-1])
 
 if __name__ == "__main__":
     main()

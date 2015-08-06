@@ -5,7 +5,6 @@ expand are nominated for DYK by someone else.
 import argparse
 import datetime
 import functools
-import getpass
 import json
 import logging
 import operator
@@ -17,12 +16,6 @@ import re
 import sys
 from bs4 import BeautifulSoup
 from clint.textui import prompt
-
-# These last two are so I can actually edit stuff. TODO: make PWB edit stuff.
-# pylint: disable=import-error
-from wikitools.wiki import Wiki as WikitoolsWiki
-# pylint: disable=import-error
-from wikitools.page import Page as WikitoolsPage
 
 # Configuration for the user-page-editing part.
 SUMMARY = u"[[Wikipedia:Bots/Requests for approval/APersonBot " +\
@@ -38,9 +31,11 @@ def main():
     "The main function."
     init_logging()
     args = parse_args()
-    people_to_notify = get_people_to_notify()
+    wiki = pywikibot.Site("en", "wikipedia")
+    wiki.login()
+    people_to_notify = get_people_to_notify(wiki)
     people_to_notify = prune_list_of_people(people_to_notify)
-    notify_people(people_to_notify, args)
+    notify_people(people_to_notify, args, wiki)
 
 def init_logging():
     "Initialize logging."
@@ -63,15 +58,12 @@ def parse_args():
                         help="Notify at most n people.")
     return parser.parse_args()
 
-def get_people_to_notify():
+def get_people_to_notify(wiki):
     """
     Returns a dict of user talkpages to notify about their creations and
     the noms about which they should be notified.
     """
     people_to_notify = dict()
-    global wiki
-    wiki = pywikibot.Site("en", "wikipedia")
-    wiki.login()
     cat_dykn = pywikibot.Category(wiki, "Category:Pending DYK nominations")
     logging.info("Getting nominations from " + cat_dykn.title() + "...")
     for nomination in pagegenerators.CategorizedPageGenerator(
@@ -87,6 +79,7 @@ def get_people_to_notify():
     logging.info("Found %d people to notify.", len(people_to_notify))
     return people_to_notify
 
+# pylint: disable=too-many-branches
 def prune_list_of_people(people_to_notify):
     "Removes people who shouldn't be notified from the list."
 
@@ -102,13 +95,13 @@ def prune_list_of_people(people_to_notify):
 
     # ... and another simply to save keystrokes.
     def user_talk_pages():
-        titles = ["User talk:" + username for username in people_to_notify.keys()]
-        for user_talk_page in pagegenerators.PagesFromTitlesGenerator(titles):
+        "A generator for valid user talk pages."
+        titles = ["User talk:" + name for name in people_to_notify.keys()]
+        for user_talk_page in [page for page in
+                               pagegenerators.PagesFromTitlesGenerator(titles)
+                               if not page.exists() or page.isRedirectPage()]:
 
-            # First, some sanity checks
-            if not user_talk_page.exists() or user_talk_page.isRedirectPage():
-                continue
-
+            # First, a sanity check
             username = user_talk_page.title(withNamespace=False)
             if not username in people_to_notify:
                 continue
@@ -165,9 +158,9 @@ def prune_list_of_people(people_to_notify):
 # methods would spill too much into global scope
 
 # pylint: disable=too-many-branches
-def notify_people(people_to_notify, args):
+# pylint: disable=too-many-statements
+def notify_people(people_to_notify, args, wiki):
     "Adds a message to people who ought to be notified about their DYK noms."
-    global wiki
 
     # Check if there's anybody to notify
     if len(people_to_notify) == 0:
@@ -243,10 +236,10 @@ def notify_people(people_to_notify, args):
                          " because of " + ", ".join(nom_names) + ".")
             people_notified[person] = people_notified.get(person,
                                                           []) + nom_names
-        except pywikibot.Error as e:
+        except pywikibot.Error as error:
             logging.error("Couldn't notify " + person +\
                           " because of " + ", ".join(nom_names) +
-                          " - result: " + str(e))
+                          " - result: " + str(error))
         except (KeyboardInterrupt, SystemExit):
             write_notified_people_to_file()
             raise
@@ -316,14 +309,15 @@ def usernames_from_text_with_sigs(wikitext):
             for m in re.finditer(r"User talk:", wikitext)]
 
 def generate_message(nom_names):
-    MESSAGE = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
-    MULTIPLE_MESSAGE = "\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
-    ITEM = "* [[{0}]] ([[Template:Did you know nominations/{0}|discussion]])"
+    "Returns the template message to be placed on the nominator's talk page."
+    message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
+    multiple_message = "\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
+    item = "* [[{0}]] ([[Template:Did you know nominations/{0}|discussion]])"
     if len(nom_names) == 1:
-        return "".join([MESSAGE.format(nom) for nom in nom_names])
+        return "".join([message.format(nom) for nom in nom_names])
     else:
-        wikitext_list = "\n".join([ITEM.format(nom) for nom in nom_names])
-        return MULTIPLE_MESSAGE.format(wikitext_list)
+        wikitext_list = "\n".join([item.format(nom) for nom in nom_names])
+        return multiple_message.format(wikitext_list)
 
 # From http://stackoverflow.com/a/26853961/1757964
 def merge_dicts(*dict_args):
