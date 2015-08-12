@@ -1,0 +1,7 @@
+({\| style="margin: 2em 0;"
+\|- style="vertical-align: top;"
+\| \[\[File:WP teahouse logo 2.png\|alt=Teahouse logo\]\]
+\| <div style="background-color:#f4f3f0; color: #393D38; padding: 1em; font-size: 1.1em; width:420px; border-radius:10px;box-shadow:-2px -2px 1px #8e8a78;">Hello! '''.+?''',
+I noticed your article was declined at Articles for Creation, and that can be disappointing. If you are wondering or curious about why your article submission was declined please post a question at the '''\[\[Wikipedia:WikiProject Articles for creation/Help desk\|Articles for creation help desk\]\]'''\. If you have any other questions about your editing experience, we'd love to help you at the '''\[\[Wikipedia:Teahouse\|Teahouse\]\]''', a friendly space on Wikipedia where experienced editors lend a hand to help new editors like yourself! See you there! .+? \(UTC\)</div>
+\|}<!-- Template:Teahouse_invitation -->
+(?:\{\{.+?\}\})*<!-- Wikipedia:Teahouse/AfC Invitation -->)
