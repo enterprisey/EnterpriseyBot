@@ -99,7 +99,7 @@ def prune_list_of_people(people_to_notify):
         titles = ["User talk:" + name for name in people_to_notify.keys()]
         for user_talk_page in [page for page in
                                pagegenerators.PagesFromTitlesGenerator(titles)
-                               if not page.exists() or page.isRedirectPage()]:
+                               if not (page.exists() or page.isRedirectPage())]:
 
             # First, a sanity check
             username = user_talk_page.title(withNamespace=False)
@@ -126,16 +126,22 @@ def prune_list_of_people(people_to_notify):
 
             # Since the outer dict in the file is keyed on month string,
             # smush all the values together to get a dict keyed on username
-            already_notified = functools.reduce(merge_dicts,
-                                                already_notified_data.values(),
-                                                {})
-            for username, nominations in already_notified.items():
+            already_notified = {}
+            for month_dict in already_notified_data.values():
+                for month_username, month_items in month_dict.items():
+                    already_notified[month_username] =\
+                        already_notified.get(month_username, []) + month_items
+
+            # Now that we've built a dict, filter the list for each username
+            for username, prior_nominations in already_notified.items():
                 if username not in people_to_notify:
                     continue
 
-                nominations = [NOMINATION_TEMPLATE + x for x in nominations]
+                prior_nominations = [NOMINATION_TEMPLATE + x
+                                     for x in prior_nominations]
                 proposed = set(people_to_notify[username])
-                people_to_notify[username] = list(proposed - set(nominations))
+                people_to_notify[username] = list(proposed -
+                                                  set(prior_nominations))
             people_to_notify = {k: v for k, v in people_to_notify.items() if v}
             print_people_left("already-notified people")
 
@@ -201,7 +207,9 @@ def notify_people(people_to_notify, args, wiki):
                                           already_notified_this_month.values(),
                                           [])))
 
-    for person, nom_names in people_to_notify.items():
+    notify_iter = zip(people_to_notify.items(),
+                      reversed(range(len(people_to_notify))))
+    for (person, nom_names), counter in notify_iter:
         if args.count:
             edits_made = len(functools.reduce(operator.add,
                                               people_notified.values(), []))
@@ -232,8 +240,8 @@ def notify_people(people_to_notify, args, wiki):
             summary = SUMMARY.format(", ".join(nom_names))
             talkpage.save(appendtext=generate_message(nom_names),
                           comment=summary)
-            logging.info("Success! Notified " + person +\
-                         " because of " + ", ".join(nom_names) + ".")
+            logging.info("Success! Notified %s because of %s. (%d left)"
+                         % (person, ", ".join(nom_names), counter))
             people_notified[person] = people_notified.get(person,
                                                           []) + nom_names
         except pywikibot.Error as error:
@@ -318,17 +326,6 @@ def generate_message(nom_names):
     else:
         wikitext_list = "\n".join([item.format(nom) for nom in nom_names])
         return multiple_message.format(wikitext_list)
-
-# From http://stackoverflow.com/a/26853961/1757964
-def merge_dicts(*dict_args):
-    '''
-    Given any number of dicts, shallow copy and merge into a new dict,
-    precedence goes to key value pairs in latter dicts.
-    '''
-    result = {}
-    for dictionary in dict_args:
-        result.update(dictionary)
-    return result
 
 if __name__ == "__main__":
     main()

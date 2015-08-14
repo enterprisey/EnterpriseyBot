@@ -1,0 +1,1 @@
+python ~/Documents/GitHub/pywikibot/pwb.py dyknotifier.py $1 $1 $3
