@@ -152,12 +152,6 @@ def prune_list_of_people(people_to_notify):
     people_to_notify = {k: v for k, v in people_to_notify.items() if v}
     print_people_left("linked people")
 
-    # Prune based on exclusion compliance
-    for user_talk_page, username in user_talk_pages():
-        if not user_talk_page.botMayEdit():
-            del people_to_notify[username]
-    print_people_left("people who are excluding this bot")
-
     return people_to_notify
 
 # Disabling pylint because breaking stuff out into
