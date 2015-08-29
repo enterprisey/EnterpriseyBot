@@ -99,7 +99,7 @@ def prune_list_of_people(people_to_notify):
         titles = ["User talk:" + name for name in people_to_notify.keys()]
         for user_talk_page in [page for page in
                                pagegenerators.PagesFromTitlesGenerator(titles)
-                               if not (page.exists() or page.isRedirectPage())]:
+                               if (page.exists() and not page.isRedirectPage())]:
 
             # First, a sanity check
             username = user_talk_page.title(withNamespace=False)
