@@ -31,14 +31,15 @@ with open(STATE_FILE) as state_file:
     edits_made = [saved_state["edits_made"]]
     current_username = saved_state["current_username"]
 
+print("Starting on %s, with %d edits made." % (current_username, edits_made[0]))
+
 pages_scanned = 0
-user_talk_pages = pagegenerator.AllpagesPageGenerator(namespace=3, site=WIKI,
-                                                      content=True,
-                                                      includeredirects=False,
-                                                      start=current_username)
-preloaded_pages = pagegenerator.PreloadingGenerator(user_talk_pages)
-for page in preloaded_pages if not args.page else [pywikibot.Page(WIKI, args.page)]:
+teahouse_img_pages = pywikibot.FilePage(WIKI, "File:WP teahouse logo 2.png").usingPages()
+for page in teahouse_img_pages if not args.page else [pywikibot.Page(WIKI, args.page)]:
     try:
+        if page.isRedirectPage():
+            continue
+
         page_text = page.get()
 
         pages_scanned += 1
@@ -51,11 +52,11 @@ for page in preloaded_pages if not args.page else [pywikibot.Page(WIKI, args.pag
                         current_state = {"edits_made": edits_made[0],
                                          "current_username": page.title(withNamespace=False)}
                         json.dump(current_state, state_file)
-                        print("Dumped state to %s." % state_file)
+                        print("Dumped state to %s." % STATE_FILE)
 
         # Fix page text
         matches = INVITE_PATTERN.findall(page_text)
-        if not matches or len(matches) == 1:
+        if (not matches) or (len(matches) == 1 and any(x in page_text for x in CATEGORIES)):
             continue
 
         for match in matches[1:]:
@@ -63,7 +64,7 @@ for page in preloaded_pages if not args.page else [pywikibot.Page(WIKI, args.pag
 
         # Add a maintenance category, if there isn't already one
         if not any(x in page_text for x in CATEGORIES):
-            page_text = page_text + "\n\n[[" + CATEGORY + "]]"
+            page_text = page_text.replace(matches[0][0], matches[0][0] + "\n\n[[" + CATEGORY + "]]")
 
         def page_save_callback(_, exception):
 
