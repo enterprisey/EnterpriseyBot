@@ -80,6 +80,7 @@ def get_people_to_notify(wiki):
     return people_to_notify
 
 # pylint: disable=too-many-branches
+# pylint: disable=too-many-locals
 def prune_list_of_people(people_to_notify):
     "Removes people who shouldn't be notified from the list."
 
@@ -88,10 +89,12 @@ def prune_list_of_people(people_to_notify):
     # ... one purely for logging purposes,
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
-        nominations = functools.reduce(operator.add,
-                                       people_to_notify.values(), [])
         logging.info("%d people for %d noms left after removing %s.",
-                     len(people_to_notify), len(nominations), what_was_removed)
+                     len(people_to_notify),
+                     len(functools.reduce(operator.add,
+                                          people_to_notify.values(),
+                                          [])),
+                     what_was_removed)
 
     # ... and another simply to save keystrokes.
     def user_talk_pages():
@@ -99,7 +102,7 @@ def prune_list_of_people(people_to_notify):
         titles = ["User talk:" + name for name in people_to_notify.keys()]
         for user_talk_page in [page for page in
                                pagegenerators.PagesFromTitlesGenerator(titles)
-                               if (page.exists() and not page.isRedirectPage())]:
+                               if page.exists() and not page.isRedirectPage()]:
 
             # First, a sanity check
             username = user_talk_page.title(withNamespace=False)
@@ -232,10 +235,10 @@ def notify_people(people_to_notify, args, wiki):
         talkpage = pywikibot.Page(wiki, title="User talk:" + person)
         try:
             summary = SUMMARY.format(", ".join(nom_names))
-            talkpage.save(appendtext=generate_message(nom_names),
+            talkpage.save(appendtext=generate_message(nom_names, wiki),
                           comment=summary)
-            logging.info("Success! Notified %s because of %s. (%d left)"
-                         % (person, ", ".join(nom_names), counter))
+            logging.info("Success! Notified %s because of %s. (%d left)",
+                         person, ", ".join(nom_names), counter)
             people_notified[person] = people_notified.get(person,
                                                           []) + nom_names
         except pywikibot.Error as error:
@@ -310,15 +313,31 @@ def usernames_from_text_with_sigs(wikitext):
     return [wikitext[m.end():m.end()+wikitext[m.end():].find("|")]\
             for m in re.finditer(r"User talk:", wikitext)]
 
-def generate_message(nom_names):
+def generate_message(nom_names, wiki):
     "Returns the template message to be placed on the nominator's talk page."
+
+    # Check for nom subpage names that don't match up to articles in the hook
+    def flag_subpage(nom_subpage_name):
+        "Flag nom subpage names that don't correspond to articles."
+        if not "," in nom_subpage_name:
+            return (nom_subpage_name, False)
+
+        return (nom_subpage_name, not pywikibot.Page(wiki, title=nom_subpage_name).exists())
+    nom_names = map(flag_subpage, nom_names)
     message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
-    multiple_message = "\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
-    item = "* [[{0}]] ([[Template:Did you know nominations/{0}|discussion]])"
+    flagged_message = u"\n\n{{{{subst:DYKNom||passive=yes|section={0}}}}}"
+    multiple_message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
+    item = u"* {0} ([[Template:Did you know nominations/{1}|discussion]])"
     if len(nom_names) == 1:
-        return "".join([message.format(nom) for nom in nom_names])
+        message_to_use = flagged_message if nom_names[0][1] else message
+        return message_to_use.format(nom_names[0][0])
     else:
-        wikitext_list = "\n".join([item.format(nom) for nom in nom_names])
+        wikitext_list = ""
+        for nom_subpage_name, flagged in nom_names:
+            main_item = ("Multiple articles"
+                         if flagged
+                         else ("[[" + nom_subpage_name + "]]"))
+            wikitext_list += "\n" + item.format(main_item, nom_subpage_name)
         return multiple_message.format(wikitext_list)
 
 if __name__ == "__main__":
