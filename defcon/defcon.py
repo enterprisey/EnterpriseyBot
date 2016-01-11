@@ -20,11 +20,7 @@ for change in site.recentchanges(
 rpm = float(num_reverts) / 30
 print("Calculated: %f reverts per minute, over 30 minutes" % rpm)
 
-with open("template.txt") as template:
-    new_text = template.read() % int(rpm)
-
 template_page = pywikibot.Page(site, TEMPLATE_NAME)
-template_page.text = new_text
-print("Saving page...")
+with open("template.txt") as template:
+    template_page.text = template.read() % int(rpm)
 template_page.save(COMMENT % int(rpm))
-print("Done! Page saved.")
