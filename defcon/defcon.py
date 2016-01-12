@@ -5,7 +5,7 @@ import pywikibot
 
 TEMPLATE_NAME = "Template:Vandalism information"
 COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to %d RPM"
-
+TEMPLATE_PATH = "/data/project/apersonbot/bot/defcon/template.txt"
 site = pywikibot.Site("en", "wikipedia")
 site.login()
 
@@ -21,6 +21,16 @@ rpm = float(num_reverts) / 30
 print("Calculated: %f reverts per minute, over 30 minutes" % rpm)
 
 template_page = pywikibot.Page(site, TEMPLATE_NAME)
-with open("template.txt") as template:
-    template_page.text = template.read() % int(rpm)
+print("Reading from template at %s" % TEMPLATE_PATH)
+try:
+    template = open(TEMPLATE_PATH)
+except IOError as e:
+    print(e)
+else:
+    try:
+        template_page.text = template.read() % int(rpm)
+    except Exception as e:
+        print(e)
+    finally:
+        template.close()
 template_page.save(COMMENT % int(rpm))
