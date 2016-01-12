@@ -4,7 +4,7 @@ import pprint
 import pywikibot
 
 TEMPLATE_NAME = "Template:Vandalism information"
-COMMENT = "Update to %d RPM (TESTING BOT MANUALLY)"
+COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to %d RPM"
 
 site = pywikibot.Site("en", "wikipedia")
 site.login()
