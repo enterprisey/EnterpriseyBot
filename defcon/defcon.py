@@ -1,6 +1,5 @@
 import datetime
 import re
-import pprint
 import pywikibot
 
 TEMPLATE_NAME = "Template:Vandalism information"
