@@ -13,7 +13,7 @@ for change in site.recentchanges(
         start=datetime.datetime.now(),
         end=datetime.datetime.now() - datetime.timedelta(minutes=30),
         changetype="edit"):
-    if re.search("revert|rv\ |rvv\ |undid/", change[u"comment"],
+    if re.search("revert|rv\ |rvv\ |undid", change[u"comment"],
                  flags=re.IGNORECASE):
         num_reverts += 1
 rpm = float(num_reverts) / 30
