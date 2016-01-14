@@ -17,10 +17,8 @@ for change in site.recentchanges(
                  flags=re.IGNORECASE):
         num_reverts += 1
 rpm = float(num_reverts) / 30
-print("Calculated: %f reverts per minute, over 30 minutes" % rpm)
 
 template_page = pywikibot.Page(site, TEMPLATE_NAME)
-print("Reading from template at %s" % TEMPLATE_PATH)
 try:
     template = open(TEMPLATE_PATH)
 except IOError as e:
