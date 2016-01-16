@@ -325,7 +325,7 @@ def generate_message(nom_names, wiki):
         the_subpage = pywikibot.Page(wiki, title=nom_subpage_name)
 
         return (nom_subpage_name, not the_subpage.exists())
-    nom_names = [flag_subpage(x) for x in nom_name]
+    nom_names = [flag_subpage(x) for x in nom_names]
     message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
     flagged_message = u"\n\n{{{{subst:DYKNom||passive=yes|section={0}}}}}"
     multiple_message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
