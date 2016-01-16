@@ -106,7 +106,7 @@ def prune_list_of_people(people_to_notify):
 
             # First, a sanity check
             username = user_talk_page.title(withNamespace=False)
-            if not username in people_to_notify:
+            if username not in people_to_notify:
                 continue
 
             # Then yield the page and username
@@ -275,7 +275,7 @@ def get_who_to_nominate(wikitext, title):
         "Is text the line in a DYK nom reading 'Created by... Nominated by...'?"
         return u"Nominated by" in text
     nom_lines = [tag for tag in small_tags if is_nom_string(tag)]
-    if not len(nom_lines) == 1:
+    if len(nom_lines) != 1:
         logging.error(u"Small tags for " + title + u": " + unicode(small_tags))
         return {}
 
@@ -319,11 +319,13 @@ def generate_message(nom_names, wiki):
     # Check for nom subpage names that don't match up to articles in the hook
     def flag_subpage(nom_subpage_name):
         "Flag nom subpage names that don't correspond to articles."
-        if not "," in nom_subpage_name:
+        if "," not in nom_subpage_name:
             return (nom_subpage_name, False)
 
-        return (nom_subpage_name, not pywikibot.Page(wiki, title=nom_subpage_name).exists())
-    nom_names = map(flag_subpage, nom_names)
+        the_subpage = pywikibot.Page(wiki, title=nom_subpage_name)
+
+        return (nom_subpage_name, not the_subpage.exists())
+    nom_names = [flag_subpage(x) for x in nom_name]
     message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes}}}}"
     flagged_message = u"\n\n{{{{subst:DYKNom||passive=yes|section={0}}}}}"
     multiple_message = u"\n\n{{{{subst:DYKNom|{0}|passive=yes|multiple=yes}}}}"
