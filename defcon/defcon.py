@@ -20,7 +20,7 @@ rpm = float(num_reverts) / 30
 
 template_page = pywikibot.Page(site, TEMPLATE_NAME)
 current_rpm_match = re.search("WikiDefcon/levels\|(\d+)", template_page.get())
-if (not current_rpm_match) or (current_defcon_match.group(1) != int(rpm)):
+if (not current_rpm_match) or (current_rpm_match.group(1) != int(rpm)):
     try:
         template = open(TEMPLATE_PATH)
     except IOError as e:
