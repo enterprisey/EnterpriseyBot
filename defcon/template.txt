@@ -1,7 +1,7 @@
 {{{{#if:{{{style|}}}|wdefcon/styles/{{{style}}}|{{{prefix|User:Zsinj/}}}Wdefcon}}
 |level  = {{WikiDefcon/levels|%d}}
 |sign   = ~~~~~
-|info   = RPM stats according to [[User:APersonBot|APersonBot]]
+|info   = %.2f RPM according to [[User:APersonBot|APersonBot]]
 |align  = {{{align|}}}
 |noinfo = {{{noinfo|}}}
 |type   = {{{type|}}}

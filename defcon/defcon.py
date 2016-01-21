@@ -19,15 +19,17 @@ for change in site.recentchanges(
 rpm = float(num_reverts) / 30
 
 template_page = pywikibot.Page(site, TEMPLATE_NAME)
-try:
-    template = open(TEMPLATE_PATH)
-except IOError as e:
-    print(e)
-else:
+current_rpm_match = re.search("WikiDefcon/levels\|(\d+)", template_page.get())
+if (not current_rpm_match) or (current_defcon_match.group(1) != int(rpm)):
     try:
-        template_page.text = template.read() % int(rpm)
-    except Exception as e:
+        template = open(TEMPLATE_PATH)
+    except IOError as e:
         print(e)
-    finally:
-        template.close()
-template_page.save(COMMENT % int(rpm))
+    else:
+        try:
+            template_page.text = template.read() % (int(rpm), rpm)
+            template_page.save(COMMENT % int(rpm))
+        except Exception as e:
+            print(e)
+        finally:
+            template.close()
