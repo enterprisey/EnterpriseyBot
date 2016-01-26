@@ -1,0 +1,22 @@
+body {
+    font-family: sans-serif;
+    color: #333;
+    max-width: 750px;
+    margin: 40px auto;
+}
+
+h2 {
+    font-size: 120%;
+}
+
+footer {
+    font-size: smaller;
+}
+
+a {
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
