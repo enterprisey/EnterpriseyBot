@@ -5,18 +5,19 @@ import pywikibot
 TEMPLATE_NAME = "Template:Vandalism information"
 COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to %d RPM"
 TEMPLATE_PATH = "/data/project/apersonbot/bot/defcon/template.txt"
+INTERVAL = 60
 site = pywikibot.Site("en", "wikipedia")
 site.login()
 
 num_reverts = 0
 for change in site.recentchanges(
         start=datetime.datetime.now(),
-        end=datetime.datetime.now() - datetime.timedelta(minutes=30),
+        end=datetime.datetime.now() - datetime.timedelta(minutes=INTERVAL),
         changetype="edit"):
     if re.search("revert|rv\ |rvv\ |undid(?!good( |-)faith)", change[u"comment"],
                  flags=re.IGNORECASE):
         num_reverts += 1
-rpm = float(num_reverts) / 30
+rpm = float(num_reverts) / INTERVAL
 
 template_page = pywikibot.Page(site, TEMPLATE_NAME)
 current_rpm_match = re.search("WikiDefcon/levels\|(\d+)", template_page.get())
