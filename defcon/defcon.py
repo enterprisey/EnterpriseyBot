@@ -54,7 +54,7 @@ def is_edit_necessary(template_page, rpm):
     need_nudge = seconds_since_last_edit > NULL_EDIT_THRESHOLD
     return rpm_changed or need_nudge
 
-def update_template(template_page):
+def update_template(template_page, rpm):
     try:
         template = open(TEMPLATE_PATH)
     except IOError as e:
@@ -74,7 +74,7 @@ def main():
     template_page = pywikibot.Page(site, TEMPLATE_NAME)
     rpm = calculate_rpm(site)
     if is_edit_necessary(template_page, rpm):
-        update_template(template_page)
+        update_template(template_page, rpm)
     else:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print("[{}] No edit necessary.".format(timestamp))
