@@ -4,7 +4,7 @@ import pywikibot
 
 TEMPLATE_NAME = "Template:Vandalism information"
 COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to %d RPM"
-TEMPLATE_PATH = "template.txt" #"/data/project/apersonbot/bot/defcon/template.txt"
+TEMPLATE_PATH = "/data/project/apersonbot/bot/defcon/template.txt"
 INTERVAL = 60
 
 # If it's been longer than this since the last edit, make a null edit to
