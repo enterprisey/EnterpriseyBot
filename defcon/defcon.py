@@ -11,6 +11,24 @@ INTERVAL = 60
 # keep our session alive.
 NULL_EDIT_THRESHOLD = 2 * 60 * 60
 
+VANDALISM_KEYWORDS = ("revert", "rv ", "long-term abuse", "long term abuse",
+                      "lta", "abuse", "rvv ", "undid")
+NOT_VANDALISM_KEYWORDS = ("uaa", "good faith", "agf", "unsourced",
+                          "unreferenced", "self", "speculat",
+                          "original research", "rv tag", "typo", "incorrect",
+                          "format")
+SECTION_HEADER = re.compile(r"/\*[\s\S]+?\*/")
+
+def is_edit_revert(edit_summary):
+    "Returns True if the edit should be counted in the RPM statistic."
+    edit_summary = SECTION_HEADER.sub("", edit_summary.lower())
+    if any([word in edit_summary for word in NOT_VANDALISM_KEYWORDS]):
+        return False
+    elif any([word in edit_summary for word in VANDALISM_KEYWORDS]):
+        return True
+    else:
+        return False
+
 def calculate_rpm(site):
     "Calculate RPM by counting reverts."
     num_reverts = 0
@@ -21,17 +39,18 @@ def calculate_rpm(site):
         if u"comment" not in change:
             continue
 
-        if re.search("revert|rv\ |rvv\ |undid(?!good( |-)faith)", change[u"comment"],
-                     flags=re.IGNORECASE):
+        if is_edit_revert(change[u"comment"]):
             num_reverts += 1
     return float(num_reverts) / INTERVAL
 
 def is_edit_necessary(template_page, rpm):
-    current_rpm_match = re.search("WikiDefcon/levels\|(\d+)", template_page.get())
+    current_rpm_match = re.search("WikiDefcon/levels\|(\d+)",
+                                  template_page.get())
     rpm_changed = ((not current_rpm_match) or
                    (int(current_rpm_match.group(1)) != int(rpm)))
-    last_edit_timestamp = [x for x in template_page.revisions(total=1)][0].timestamp
-    seconds_since_last_edit = (datetime.datetime.utcnow() - last_edit_timestamp).total_seconds()
+    last_edit = [x for x in template_page.revisions(total=1)][0]
+    seconds_since_last_edit = (datetime.datetime.utcnow() -
+                               last_edit.timestamp).total_seconds()
     need_nudge = seconds_since_last_edit > NULL_EDIT_THRESHOLD
     return rpm_changed or need_nudge
 
