@@ -9,7 +9,7 @@ INTERVAL = 60
 
 # If it's been longer than this since the last edit, make a null edit to
 # keep our session alive.
-NULL_EDIT_THRESHOLD = 3 * 60 * 60
+NULL_EDIT_THRESHOLD = 2 * 60 * 60
 
 site = pywikibot.Site("en", "wikipedia")
 site.login()
