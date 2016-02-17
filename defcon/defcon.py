@@ -7,10 +7,6 @@ COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating va
 TEMPLATE_PATH = "/data/project/apersonbot/bot/defcon/template.txt"
 INTERVAL = 60
 
-# If it's been longer than this since the last edit, make a null edit to
-# keep our session alive.
-NULL_EDIT_THRESHOLD = 2 * 60 * 60
-
 VANDALISM_KEYWORDS = ("revert", "rv ", "long-term abuse", "long term abuse",
                       "lta", "abuse", "rvv ", "undid")
 NOT_VANDALISM_KEYWORDS = ("uaa", "good faith", "agf", "unsourced",
@@ -46,13 +42,8 @@ def calculate_rpm(site):
 def is_edit_necessary(template_page, rpm):
     current_rpm_match = re.search("WikiDefcon/levels\|(\d+)",
                                   template_page.get())
-    rpm_changed = ((not current_rpm_match) or
-                   (int(current_rpm_match.group(1)) != int(rpm)))
-    last_edit = [x for x in template_page.revisions(total=1)][0]
-    seconds_since_last_edit = (datetime.datetime.utcnow() -
-                               last_edit.timestamp).total_seconds()
-    need_nudge = seconds_since_last_edit > NULL_EDIT_THRESHOLD
-    return rpm_changed or need_nudge
+    return ((not current_rpm_match) or
+            (int(current_rpm_match.group(1)) != int(rpm)))
 
 def update_template(template_page, rpm):
     try:
