@@ -3,7 +3,7 @@ A module implementing a bot to notify editors when articles they create or
 expand are nominated for DYK by someone else.
 """
 import argparse
-import datetime
+from datetime import datetime, timedelta
 import functools
 import json
 import logging
@@ -14,6 +14,8 @@ import pywikibot
 import pywikibot.pagegenerators as pagegenerators
 import re
 import sys
+import time
+
 from bs4 import BeautifulSoup
 from clint.textui import prompt
 
@@ -39,9 +41,13 @@ def main():
 
 def init_logging():
     "Initialize logging."
+
+    # Trick from http://stackoverflow.com/a/6321221/1757964
+    logging.Formatter.converter = time.gmtime
+
     logging.basicConfig(filename='dyknotifier.log',
                         level=logging.DEBUG,
-                        datefmt="%d %b. %Y %I:%M:%S",
+                        datefmt="%Y-%m-%dT%H:%M:%SZ",
                         format="[%(asctime)s] [%(levelname)s] %(message)s")
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.INFO)
@@ -175,8 +181,7 @@ def notify_people(people_to_notify, args, wiki):
 
     def write_notified_people_to_file():
         """Update the file of notified people with people_notified."""
-        now = datetime.datetime.now().strftime("%B") + " " +\
-              str(datetime.datetime.now().year)
+        this_month = datetime.now().strftime("%B %Y")
         with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
             try:
                 already_notified = json.load(already_notified_file)
@@ -186,7 +191,7 @@ def notify_people(people_to_notify, args, wiki):
                 else:
                     already_notified = {} # eh, we'll be writing to it anyway
 
-            already_notified_this_month = already_notified.get(now, {})
+            already_notified_this_month = already_notified.get(this_month, {})
             with open(ALREADY_NOTIFIED_FILE, "w") as already_notified_file:
                 usernames = set(already_notified_this_month.keys() +
                                 people_notified.keys())
@@ -195,7 +200,16 @@ def notify_people(people_to_notify, args, wiki):
                         already_notified_this_month.get(username, []) +\
                         people_notified.get(username, [])))
 
-                already_notified[now] = already_notified_this_month
+                already_notified[this_month] = already_notified_this_month
+
+                # Remove all data from more than a year ago
+                a_year_ago = datetime.today() - timedelta(365)
+                def not_too_old(month):
+                    """True if the given month was less than a year ago."""
+                    return datetime.strptime(month, "%B %Y") > a_year_ago
+                already_notified = {k: v for k, v in already_notified.items()
+                                    if not_too_old(k)}
+
                 json.dump(already_notified, already_notified_file)
 
         logging.info("Wrote %d people for %d nominations this month.",
