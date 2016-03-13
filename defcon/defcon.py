@@ -16,7 +16,7 @@ NOT_VANDALISM_KEYWORDS = ("uaa", "good faith", "agf", "unsourced",
 SECTION_HEADER = re.compile(r"/\*[\s\S]+?\*/")
 
 def is_edit_revert(edit_summary):
-    "Returns True if the edit should be counted in the RPM statistic."
+    """Returns True if the edit should be counted in the RPM statistic."""
     edit_summary = SECTION_HEADER.sub("", edit_summary.lower())
     if any([word in edit_summary for word in NOT_VANDALISM_KEYWORDS]):
         return False
@@ -26,7 +26,7 @@ def is_edit_revert(edit_summary):
         return False
 
 def calculate_rpm(site):
-    "Calculate RPM by counting reverts."
+    """Calculate RPM by counting reverts."""
     num_reverts = 0
     for change in site.recentchanges(
             start=datetime.datetime.now(),
