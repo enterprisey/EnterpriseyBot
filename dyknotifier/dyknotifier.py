@@ -354,6 +354,10 @@ def generate_message(nom_names, wiki):
                          if flagged
                          else ("[[" + nom_subpage_name + "]]"))
             wikitext_list += "\n" + item.format(main_item, nom_subpage_name)
+
+        # Get rid of initial newline
+        wikitext_list = wikitext_list[1:]
+
         return multiple_message.format(wikitext_list)
 
 if __name__ == "__main__":
