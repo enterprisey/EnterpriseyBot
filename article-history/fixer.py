@@ -62,26 +62,27 @@ class History:
 class Processor:
     def __init__(self, wikitext):
         self.text = wikitext
-        self.history = History(wikitext)
 
     def get_processed_text(self):
         old_ah_wikitext = re.search(r"\{\{(article history[\s\S]+?)\}\}",
                                     self.text, flags=re.IGNORECASE).group(0)
 
+        history = History(self.text)
+
         itn_search = re.search(r"\{\{(itn talk[\s\S]+?)\}\}", self.text, flags=re.IGNORECASE)
         if itn_search:
             itn = itn_search.group(1)
             new_dates = [(x[x.find("=")+1:], "") for x in itn.split("|")[1:] if "date" in x]
-            itn_list = new_dates + self.get_relevant_params("itn")
+            itn_list = new_dates + self.get_relevant_params("itn", history)
 
             # Update the article history template
-            self.history.other_parameters["itndate"] = itn_list[0][0]
+            history.other_parameters["itndate"] = itn_list[0][0]
             if itn_list[0][1]:
-                self.history.other_parameters["itnlink"] = itn_list[0][1]
+                history.other_parameters["itnlink"] = itn_list[0][1]
             for i, item in enumerate(itn_list[1:], start=2):
-                self.history.other_parameters["itn%ddate" % i] = item[0]
+                history.other_parameters["itn%ddate" % i] = item[0]
                 if item[1]:
-                    self.history.other_parameters["itn%ditem" % i] = item[1]
+                    history.other_parameters["itn%ditem" % i] = item[1]
 
             # Delete the ITN template
             self.text = self.text.replace(itn_search.group(0), DELETE_COMMENT)
@@ -99,16 +100,16 @@ class Processor:
                                      ""))
                 else:
                     break
-            otd_list += self.get_relevant_params("otd")
+            otd_list += self.get_relevant_params("otd", history)
 
             # Update the article history template
-            self.history.other_parameters["otddate"], self.history.other_parameters["otdoldid"], _ = otd_list[0]
+            history.other_parameters["otddate"], history.other_parameters["otdoldid"], _ = otd_list[0]
             if otd_list[0][2]:
-                self.history.other_parameters["otdlink"] = otd_list[0][2]
+                history.other_parameters["otdlink"] = otd_list[0][2]
             for i, item in enumerate(otd_list[1:], start=2):
-                self.history.other_parameters["otd%ddate" % i], self.history.other_parameters["otd%doldid" % i], _ = item
+                history.other_parameters["otd%ddate" % i], history.other_parameters["otd%doldid" % i], _ = item
                 if item[2]:
-                    self.history.other_parameters["otd%dlink" % i] = item[2]
+                    history.other_parameters["otd%dlink" % i] = item[2]
 
             # Delete the OTD template
             self.text = self.text.replace(otd_search.group(0), DELETE_COMMENT)
@@ -117,28 +118,28 @@ class Processor:
         if dyk_search:
             dyk = dyk_search.group(1)
             dyk_params = dyk.split("|")[1:]
-            self.history.other_parameters["dykentry"] = next(x for x in dyk_params if x.startswith("entry")).split("=")[1]
+            history.other_parameters["dykentry"] = next(x for x in dyk_params if x.startswith("entry")).split("=")[1]
             positional_dyk_params = [x for x in dyk_params if "=" not in x]
             if len(positional_dyk_params) == 1:
-                self.history.other_parameters["dykdate"] = positional_dyk_params[0]
+                history.other_parameters["dykdate"] = positional_dyk_params[0]
             elif len(positional_dyk_params) == 2:
                 for param in positional_dyk_params:
                     if len(param) == 4:
                         year = param
                     else:
                         month_day = param
-                self.history.other_parameters["dykdate"] = month_day + " " + year
+                history.other_parameters["dykdate"] = month_day + " " + year
 
             # Delete the DYK template
             self.text = self.text.replace(dyk_search.group(0), DELETE_COMMENT)
 
         # Delete the lines with only the delete comment on them
         self.text = "\n".join(x for x in self.text.splitlines() if x != DELETE_COMMENT)
-        self.text = self.text.replace(old_ah_wikitext, self.history.as_wikitext())
+        self.text = self.text.replace(old_ah_wikitext, history.as_wikitext())
         return self.text
 
-    def get_relevant_params(self, code):
-        current_params = {x: y for x, y in self.history.other_parameters.items() if code in x}
+    def get_relevant_params(self, code, history):
+        current_params = {x: y for x, y in history.other_parameters.items() if code in x}
         result = []
         extra_suffixes = EXTRA_SUFFIXES[code]
         for date_param_name in [x for x in current_params if "date" in x]:
