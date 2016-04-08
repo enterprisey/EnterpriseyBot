@@ -18,6 +18,9 @@ EXTRA_SUFFIXES = {
 DELETE_COMMENT = "<!-- Delete this line. -->"
 ARTICLE_HISTORY = re.compile(r"\{\{(article history[\s\S]*?)\}\}",
                                    flags=re.IGNORECASE)
+ITN = re.compile(r"\{\{(itn talk[\s\S]+?)\}\}", flags=re.IGNORECASE)
+OTD = re.compile(r"\{\{(on this day[\s\S]+?)\}\}", flags=re.IGNORECASE)
+DYK = re.compile(r"\{\{(dyktalk[\s\S]+?)\}\}", flags=re.IGNORECASE)
 
 class History:
     def __init__(self, wikitext):
@@ -81,11 +84,13 @@ class Processor:
         # For use in sorting parameters
         by_time = lambda x: datetime.datetime.fromtimestamp(mktime(Calendar().parse(x[0])[0]))
 
-        itn_search = re.search(r"\{\{(itn talk[\s\S]+?)\}\}", self.text, flags=re.IGNORECASE)
-        if itn_search:
-            itn = itn_search.group(1)
-            new_dates = [(x[x.find("=")+1:], "") for x in itn.split("|")[1:] if "date" in x]
-            itn_list = new_dates + self.get_relevant_params("itn", history)
+        if ITN.search(self.text):
+            itn_list = self.get_relevant_params("itn", history)
+            for itn_result in ITN.finditer(self.text):
+                itn = itn_result.group(1)
+                itn_list += [(x[x.find("=")+1:], "") for x in itn.split("|")[1:] if "date" in x]
+                self.text = self.text.replace(itn_result.group(0), DELETE_COMMENT)
+
             itn_list.sort(key=by_time)
 
             # Update the article history template
@@ -97,23 +102,21 @@ class Processor:
                 if item[1]:
                     history.other_parameters["itn%ditem" % i] = item[1]
 
-            # Delete the ITN template
-            self.text = self.text.replace(itn_search.group(0), DELETE_COMMENT)
+        if OTD.search(self.text):
+            otd_list = self.get_relevant_params("otd", history)
+            for otd_result in OTD.finditer(self.text):
+                otd = otd_result.group(1)
+                otd_params = {x: y for x, y in [t.strip().split("=") for t in otd.split("|")[1:]]}
+                for i in itertools.count(1):
+                    date_key = "date%d" % i
+                    if date_key in otd_params:
+                        otd_list.append((otd_params[date_key],
+                                         otd_params.get("oldid%d" % i, ""),
+                                         ""))
+                    else:
+                        break
+                self.text = self.text.replace(otd_result.group(0), DELETE_COMMENT)
 
-        otd_search = re.search(r"\{\{(on this day[\s\S]+?)\}\}", self.text, flags=re.IGNORECASE)
-        if otd_search:
-            otd = otd_search.group(1)
-            otd_params = {x: y for x, y in [t.strip().split("=") for t in otd.split("|")[1:]]}
-            otd_list = []
-            for i in itertools.count(1):
-                date_key = "date%d" % i
-                if date_key in otd_params:
-                    otd_list.append((otd_params[date_key],
-                                     otd_params.get("oldid%d" % i, ""),
-                                     ""))
-                else:
-                    break
-            otd_list += self.get_relevant_params("otd", history)
             otd_list.sort(key=by_time)
 
             # Update the article history template
@@ -125,10 +128,7 @@ class Processor:
                 if item[2]:
                     history.other_parameters["otd%dlink" % i] = item[2]
 
-            # Delete the OTD template
-            self.text = self.text.replace(otd_search.group(0), DELETE_COMMENT)
-
-        dyk_search = re.search(r"\{\{(dyktalk[\s\S]+?)\}\}", self.text, flags=re.IGNORECASE)
+        dyk_search = DYK.search(self.text)
         if dyk_search:
             dyk = dyk_search.group(1)
             dyk_params = dyk.split("|")[1:]

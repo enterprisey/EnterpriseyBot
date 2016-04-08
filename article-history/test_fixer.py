@@ -23,8 +23,11 @@ class TestAH(unittest.TestCase):
                          {"currentstatus":"GA", "topic":"math"})
 
 class TestFixer(unittest.TestCase):
+    def processor_verify(self, text, output):
+        self.assertEqual(Processor(text).get_processed_text(), output)
+
     def test_itn(self):
-        processor = Processor("""
+        self.processor_verify("""
 {{article history
 |action1=GAN
 |action1date=12:52, 7 December 2005
@@ -33,8 +36,7 @@ class TestFixer(unittest.TestCase):
 |currentstatus=GA
 |topic=math
 }}
-{{ITN talk|date1=12 September 2009|date2=24 December 2013}}""")
-        self.assertEqual(processor.get_processed_text(), """
+{{ITN talk|date1=12 September 2009|date2=24 December 2013}}""", """
 {{article history
 |action1=GAN
 |action1date=12:52, 7 December 2005
@@ -49,7 +51,7 @@ class TestFixer(unittest.TestCase):
 }}""")
 
     def test_otd(self):
-        processor = Processor("""
+        self.processor_verify("""
 {{article history
 |action1=GAN
 |action1date=12:52, 7 December 2005
@@ -58,8 +60,7 @@ class TestFixer(unittest.TestCase):
 |currentstatus=GA
 |topic=math
 }}
-{{On this day|date1=2004-05-28|oldid1=6717950|date2=2005-05-28|oldid2=16335227}}""")
-        self.assertEqual(processor.get_processed_text(), """
+{{On this day|date1=2004-05-28|oldid1=6717950|date2=2005-05-28|oldid2=16335227}}""", """
 {{article history
 |action1=GAN
 |action1date=12:52, 7 December 2005
@@ -76,7 +77,7 @@ class TestFixer(unittest.TestCase):
 }}""")
 
     def test_dyk(self):
-        processor = Processor("""
+        self.processor_verify("""
 {{Article history
 | action1       =  GAN
 | action1date   = 14:45, 22 March 2015 (UTC)
@@ -84,8 +85,7 @@ class TestFixer(unittest.TestCase):
 | action1result = Passed
 | action1oldid  = 653061069
 }}
-{{dyktalk|6 April|2015|entry= ... that '''[[dyslexia]]''' is the most common learning disability, affecting about 3% to 7% of people?}}""")
-        self.assertEqual(processor.get_processed_text(), """
+{{dyktalk|6 April|2015|entry= ... that '''[[dyslexia]]''' is the most common learning disability, affecting about 3% to 7% of people?}}""", """
 {{article history
 |action1=GAN
 |action1date=14:45, 22 March 2015 (UTC)
@@ -98,22 +98,30 @@ class TestFixer(unittest.TestCase):
 }}""")
 
     def test_empty(self):
-        self.assertEqual(Processor("").get_processed_text(), "")
+        self.processor_verify("", "")
 
     def test_blank_ah(self):
-        processor = Processor("""
+        self.processor_verify("""
 {{Article history}}
-{{ITN talk|date1=1 June 2009}}""")
-        self.assertEqual(processor.get_processed_text(), """
+{{ITN talk|date1=1 June 2009}}""", """
 {{article history
 |itndate=1 June 2009
 }}""")
 
     def test_already(self):
-        processor = Processor("""
+        self.processor_verify("""
 {{Article history|itndate=1 June 2009}}
-{{ITN talk|date1=1 June 2010}}""")
-        self.assertEqual(processor.get_processed_text(), """
+{{ITN talk|date1=1 June 2010}}""", """
+{{article history
+|itndate=1 June 2009
+|itn2date=1 June 2010
+}}""")
+
+    def test_multiple(self):
+        self.processor_verify("""
+{{Article history}}
+{{ITN talk|date1=1 June 2010}}
+{{ITN talk|date1=1 June 2009}}""", """
 {{article history
 |itndate=1 June 2009
 |itn2date=1 June 2010
