@@ -16,6 +16,9 @@ from clint.textui import progress
 import pywikibot
 import pywikibot.pagegenerators as pagegenerator
 
+ALBUM_PAGE_CACHE = "s.json"
+INFOBOX_PAGE_CACHE = "m.json"
+
 def main():
     "The main function."
     init_logging()
@@ -60,7 +63,7 @@ def list3():
 
     FORCE_CACHE_RELOAD = False
 
-    if (not os.path.exists("m")) or FORCE_CACHE_RELOAD:
+    if (not os.path.exists(INFOBOX_PAGE_CACHE)) or FORCE_CACHE_RELOAD:
         keyed_pages = {}
         for template_name in ["Template:WikiProject Albums",
                               "Template:Infobox album"]:
@@ -84,9 +87,9 @@ def list3():
         album_pages = keyed_pages["Template:WikiProject Albums"]
         infoboxed_pages = keyed_pages["Template:Infobox album"]
     else:
-        with open("s", "r") as cache:
+        with open(ALBUM_PAGE_CACHE, "r") as cache:
             album_pages = json.load(cache)
-        with open("m", "r") as cache:
+        with open(INFOBOX_PAGE_CACHE, "r") as cache:
             infoboxed_pages = json.load(cache)
 
     logging.info("Removing album pages that already have infoboxes...")
