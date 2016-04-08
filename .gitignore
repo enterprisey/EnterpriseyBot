@@ -6,6 +6,8 @@ sql/
 ~$*
 *~
 *.log
+*.json
+*.json.bak
 
 # Pywikibot detritus
 dyknotifier/apicache/
