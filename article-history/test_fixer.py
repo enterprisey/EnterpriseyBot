@@ -1,6 +1,26 @@
 import unittest
 
-from fixer import Processor
+from fixer import Processor, History
+
+class TestAH(unittest.TestCase):
+    def setUp(self):
+        self.history_normal = History("""
+{{article history
+|action1=GAN
+|action1date=12:52, 7 December 2005
+|action1result=listed
+|action1oldid=30462537
+|currentstatus=GA
+|topic=math
+}}""")
+
+    def test_actions(self):
+        self.assertEqual(self.history_normal.actions[0],
+                         ("GAN", "12:52, 7 December 2005", "", "listed", "30462537"))
+
+    def test_other(self):
+        self.assertEqual(self.history_normal.other_parameters,
+                         {"currentstatus":"GA", "topic":"math"})
 
 class TestFixer(unittest.TestCase):
     def test_itn(self):
@@ -75,6 +95,28 @@ class TestFixer(unittest.TestCase):
 
 |dykdate=6 April 2015
 |dykentry= ... that '''[[dyslexia]]''' is the most common learning disability, affecting about 3% to 7% of people?
+}}""")
+
+    def test_empty(self):
+        self.assertEqual(Processor("").get_processed_text(), "")
+
+    def test_blank_ah(self):
+        processor = Processor("""
+{{Article history}}
+{{ITN talk|date1=1 June 2009}}""")
+        self.assertEqual(processor.get_processed_text(), """
+{{article history
+|itndate=1 June 2009
+}}""")
+
+    def test_already(self):
+        processor = Processor("""
+{{Article history|itndate=1 June 2009}}
+{{ITN talk|date1=1 June 2010}}""")
+        self.assertEqual(processor.get_processed_text(), """
+{{article history
+|itndate=1 June 2009
+|itn2date=1 June 2010
 }}""")
 
 if __name__ == '__main__':

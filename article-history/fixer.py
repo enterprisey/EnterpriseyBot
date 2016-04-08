@@ -1,8 +1,13 @@
 import argparse
+import datetime
 import itertools
-import pywikibot
 import re
 import sys
+from time import mktime
+
+from parsedatetime import Calendar
+
+# Pywikibot imported in main() so we can test w/o importing
 
 ACTION_ORDER = ("", "date", "link", "result", "oldid")
 EXTRA_SUFFIXES = {
@@ -11,12 +16,13 @@ EXTRA_SUFFIXES = {
     "dyk": ["entry"]
     }
 DELETE_COMMENT = "<!-- Delete this line. -->"
+ARTICLE_HISTORY = re.compile(r"\{\{(article history[\s\S]*?)\}\}",
+                                   flags=re.IGNORECASE)
 
 class History:
     def __init__(self, wikitext):
         """Builds fields from text containing a transclusion."""
-        search = re.search(r"\{\{(article history[\s\S]+?)\}\}",
-                           wikitext, flags=re.IGNORECASE)
+        search = ARTICLE_HISTORY.search(wikitext)
         params = search.group(1).split("|")[1:]
         params = {x.strip(): y.strip() for x, y in [t.split("=") for t in params]}
 
@@ -64,16 +70,23 @@ class Processor:
         self.text = wikitext
 
     def get_processed_text(self):
-        old_ah_wikitext = re.search(r"\{\{(article history[\s\S]+?)\}\}",
-                                    self.text, flags=re.IGNORECASE).group(0)
+        old_ah_wikitext_search = ARTICLE_HISTORY.search(self.text)
 
+        if not old_ah_wikitext_search:
+            return self.text
+
+        old_ah_wikitext = old_ah_wikitext_search.group(0)
         history = History(self.text)
+
+        # For use in sorting parameters
+        by_time = lambda x: datetime.datetime.fromtimestamp(mktime(Calendar().parse(x[0])[0]))
 
         itn_search = re.search(r"\{\{(itn talk[\s\S]+?)\}\}", self.text, flags=re.IGNORECASE)
         if itn_search:
             itn = itn_search.group(1)
             new_dates = [(x[x.find("=")+1:], "") for x in itn.split("|")[1:] if "date" in x]
             itn_list = new_dates + self.get_relevant_params("itn", history)
+            itn_list.sort(key=by_time)
 
             # Update the article history template
             history.other_parameters["itndate"] = itn_list[0][0]
@@ -101,6 +114,7 @@ class Processor:
                 else:
                     break
             otd_list += self.get_relevant_params("otd", history)
+            otd_list.sort(key=by_time)
 
             # Update the article history template
             history.other_parameters["otddate"], history.other_parameters["otdoldid"], _ = otd_list[0]
@@ -150,6 +164,8 @@ class Processor:
         return result
 
 def main():
+    import pywikibot
+
     site = pywikibot.Site("en", "wikipedia")
     site.login()
 
