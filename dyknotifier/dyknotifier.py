@@ -3,6 +3,7 @@ A module implementing a bot to notify editors when articles they create or
 expand are nominated for DYK by someone else.
 """
 import argparse
+import ConfigParser
 from datetime import datetime, timedelta
 import functools
 import json
@@ -18,18 +19,13 @@ import time
 from bs4 import BeautifulSoup
 from clint.textui import prompt
 
-# Configuration for the user-page-editing part.
-SUMMARY = u"[[Wikipedia:Bots/Requests for approval/APersonBot " +\
-                "2|Bot]] notification about the DYK nomination of" +\
-                " {0}."
-
-# And other configuration.
-ALREADY_NOTIFIED_FILE = "notified.json"
-NOMINATION_TEMPLATE = "Template:Did you know nominations/"
-BAD_TEXT = ur'(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DYK)'
+CONFIG = None
+BAD_TEXT = re.compile(r"(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DYK)",
+                      re.I)
 
 def main():
     "The main function."
+    read_config()
     verify_data_present()
     args = parse_args()
     wiki = pywikibot.Site("en", "wikipedia")
@@ -38,10 +34,16 @@ def main():
     people_to_notify = prune_list_of_people(people_to_notify)
     notify_people(people_to_notify, args, wiki)
 
+def read_config():
+    """Read the config file."""
+    global CONFIG
+    CONFIG = ConfigParser.RawConfigParser()
+    CONFIG.read("config.txt")
+
 def verify_data_present():
     """Check that the already-notified database is there."""
-    if not os.path.isfile(ALREADY_NOTIFIED_FILE):
-        print("Couldn't locate %s" % ALREADY_NOTIFIED_FILE)
+    if not os.path.isfile(CONFIG.get("dyknotifier", "ALREADY_NOTIFIED_FILE")):
+        print("Couldn't locate %s" % CONFIG.get("dyknotifier", "ALREADY_NOTIFIED_FILE"))
         sys.exit(1)
 
 def parse_args():
@@ -66,7 +68,7 @@ def get_people_to_notify(wiki):
     for nomination in pagegenerators.CategorizedPageGenerator(
             cat_dykn, content=True):
         wikitext = nomination.get()
-        if not re.search(re.compile(BAD_TEXT, re.I), wikitext):
+        if not BAD_TEXT.search(wikitext):
             who_to_nominate = get_who_to_nominate(wikitext,
                                                   nomination.title())
             for username, nomination in who_to_nominate.items():
@@ -114,7 +116,7 @@ def prune_list_of_people(people_to_notify):
     print_people_left("empty entries")
 
     # Prune people I've already notified
-    with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
+    with open(CONFIG.get("dyknotifier", "ALREADY_NOTIFIED_FILE")) as already_notified_file:
         try:
             already_notified_data = json.load(already_notified_file)
         except ValueError as error:
@@ -136,7 +138,7 @@ def prune_list_of_people(people_to_notify):
             if username not in people_to_notify:
                 continue
 
-            prior_nominations = [NOMINATION_TEMPLATE + x
+            prior_nominations = [CONFIG.get("dyknotifier", "NOMINATION_TEMPLATE") + x
                                  for x in prior_nominations]
             proposed = set(people_to_notify[username])
             people_to_notify[username] = list(proposed -
@@ -172,7 +174,7 @@ def notify_people(people_to_notify, args, wiki):
     def write_notified_people_to_file():
         """Update the file of notified people with people_notified."""
         this_month = datetime.now().strftime("%B %Y")
-        with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
+        with open(CONFIG.get("dyknotifier", "ALREADY_NOTIFIED_FILE")) as already_notified_file:
             try:
                 already_notified = json.load(already_notified_file)
             except ValueError as error:
@@ -182,7 +184,7 @@ def notify_people(people_to_notify, args, wiki):
                     already_notified = {} # eh, we'll be writing to it anyway
 
             already_notified_this_month = already_notified.get(this_month, {})
-            with open(ALREADY_NOTIFIED_FILE, "w") as already_notified_file:
+            with open(CONFIG.get("dyknotifier", "ALREADY_NOTIFIED_FILE"), "w") as already_notified_file:
                 usernames = set(already_notified_this_month.keys() +
                                 people_notified.keys())
                 for username in usernames:
@@ -238,7 +240,7 @@ def notify_people(people_to_notify, args, wiki):
                 sys.exit(0)
         talkpage = pywikibot.Page(wiki, title="User talk:" + person)
         try:
-            summary = SUMMARY.format(", ".join(nom_names))
+            summary = CONFIG.get("dyknotifier", "SUMMARY").format(", ".join(nom_names))
             talkpage.save(appendtext=generate_message(nom_names, wiki),
                           comment=summary)
             print("Success! Notified %s because of %s. (%d left)",
