@@ -6,7 +6,6 @@ import argparse
 from datetime import datetime, timedelta
 import functools
 import json
-import logging
 import operator
 import os.path
 # pylint: disable=import-error
@@ -31,7 +30,6 @@ BAD_TEXT = ur'(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DYK)'
 
 def main():
     "The main function."
-    init_logging()
     verify_data_present()
     args = parse_args()
     wiki = pywikibot.Site("en", "wikipedia")
@@ -43,22 +41,8 @@ def main():
 def verify_data_present():
     """Check that the already-notified database is there."""
     if not os.path.isfile(ALREADY_NOTIFIED_FILE):
-        logging.critical("Couldn't locate %s" % ALREADY_NOTIFIED_FILE)
+        print("Couldn't locate %s" % ALREADY_NOTIFIED_FILE)
         sys.exit(1)
-
-def init_logging():
-    "Initialize logging."
-
-    # Trick from http://stackoverflow.com/a/6321221/1757964
-    logging.Formatter.converter = time.gmtime
-
-    logging.basicConfig(filename='dyknotifier.log',
-                        level=logging.DEBUG,
-                        datefmt="%Y-%m-%dT%H:%M:%SZ",
-                        format="[%(asctime)s] [%(levelname)s] %(message)s")
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.INFO)
-    logging.getLogger().addHandler(stream_handler)
 
 def parse_args():
     "Parse the arguments."
@@ -78,7 +62,7 @@ def get_people_to_notify(wiki):
     """
     people_to_notify = dict()
     cat_dykn = pywikibot.Category(wiki, "Category:Pending DYK nominations")
-    logging.info("Getting nominations from " + cat_dykn.title() + "...")
+    print("Getting nominations from " + cat_dykn.title() + "...")
     for nomination in pagegenerators.CategorizedPageGenerator(
             cat_dykn, content=True):
         wikitext = nomination.get()
@@ -89,7 +73,7 @@ def get_people_to_notify(wiki):
                 people_to_notify[username] = people_to_notify.get(
                     username, []) + [nomination]
 
-    logging.info("Found %d people to notify.", len(people_to_notify))
+    print("Found {} people to notify.".format(len(people_to_notify)))
     return people_to_notify
 
 # pylint: disable=too-many-branches
@@ -102,12 +86,12 @@ def prune_list_of_people(people_to_notify):
     # ... one purely for logging purposes,
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
-        logging.info("%d people for %d noms left after removing %s.",
-                     len(people_to_notify),
-                     len(functools.reduce(operator.add,
-                                          people_to_notify.values(),
-                                          [])),
-                     what_was_removed)
+        print("%d people for %d noms left after removing %s." %
+              (len(people_to_notify),
+               len(functools.reduce(operator.add,
+                                    people_to_notify.values(),
+                                    [])),
+               what_was_removed))
 
     # ... and another simply to save keystrokes.
     def user_talk_pages():
@@ -179,7 +163,7 @@ def notify_people(people_to_notify, args, wiki):
 
     # Check if there's anybody to notify
     if len(people_to_notify) == 0:
-        logging.info("Nobody to notify.")
+        print("Nobody to notify.")
         return
 
     # Do the notification
@@ -218,7 +202,7 @@ def notify_people(people_to_notify, args, wiki):
 
                 json.dump(already_notified, already_notified_file)
 
-        logging.info("Wrote %d people for %d nominations this month.",
+        print("Wrote %d people for %d nominations this month.",
                      len(already_notified_this_month),
                      len(functools.reduce(operator.add,
                                           already_notified_this_month.values(),
@@ -231,7 +215,7 @@ def notify_people(people_to_notify, args, wiki):
             edits_made = len(functools.reduce(operator.add,
                                               people_notified.values(), []))
             if edits_made >= args.count:
-                logging.info("%d notified; exiting.", edits_made)
+                print("%d notified; exiting.", edits_made)
                 write_notified_people_to_file()
                 sys.exit(0)
 
@@ -239,17 +223,17 @@ def notify_people(people_to_notify, args, wiki):
         nom_names = [name[34:] for name in nom_names]
 
         if args.interactive:
-            logging.info("About to notify " + person + " for " +\
+            print("About to notify " + person + " for " +\
                          ", ".join(nom_names) + ".")
             choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
             if choice[0] == "s":
                 if prompt.yn("Because I've already notified them?"):
                     people_notified[person] = people_notified.get(
                         person, []) + nom_names
-                logging.info("Skipping " + person + ".")
+                print("Skipping " + person + ".")
                 continue
             elif choice[0] == "q":
-                logging.info("Stop requested; exiting.")
+                print("Stop requested; exiting.")
                 write_notified_people_to_file()
                 sys.exit(0)
         talkpage = pywikibot.Page(wiki, title="User talk:" + person)
@@ -257,19 +241,19 @@ def notify_people(people_to_notify, args, wiki):
             summary = SUMMARY.format(", ".join(nom_names))
             talkpage.save(appendtext=generate_message(nom_names, wiki),
                           comment=summary)
-            logging.info("Success! Notified %s because of %s. (%d left)",
+            print("Success! Notified %s because of %s. (%d left)",
                          person, ", ".join(nom_names), counter)
             people_notified[person] = people_notified.get(person,
                                                           []) + nom_names
         except pywikibot.Error as error:
-            logging.error("Couldn't notify " + person +\
+            print("Couldn't notify " + person +\
                           " because of " + ", ".join(nom_names) +
                           " - result: " + str(error))
         except (KeyboardInterrupt, SystemExit):
             write_notified_people_to_file()
             raise
         except UnicodeEncodeError:
-            logging.error(u"Unicode encoding error notifying " +\
+            print(u"Unicode encoding error notifying " +\
                           unicode(person) +\
                           u" about " + unicode(", ".join(nom_names)) +
                           u": " + unicode(sys.exc_info()[1]))
@@ -282,11 +266,11 @@ def get_who_to_nominate(wikitext, title):
     should be notified).
     """
     if "#REDIRECT" in wikitext:
-        logging.error(title + " is a redirect.")
+        print(title + " is a redirect.")
         return {}
 
     if "<small>" not in wikitext:
-        logging.error("<small> not found in " + title)
+        print("<small> not found in " + title)
         return {}
 
     soup = BeautifulSoup(wikitext)
@@ -296,7 +280,7 @@ def get_who_to_nominate(wikitext, title):
         return u"Nominated by" in text
     nom_lines = [tag for tag in small_tags if is_nom_string(tag)]
     if len(nom_lines) != 1:
-        logging.error(u"Small tags for " + title + u": " + unicode(small_tags))
+        print(u"Small tags for " + title + u": " + unicode(small_tags))
         return {}
 
     # Every user whose talk page is linked to within the <small> tags
@@ -306,7 +290,7 @@ def get_who_to_nominate(wikitext, title):
 
     # If there aren't any usernames, WTF and exit
     if len(usernames) == 0:
-        logging.error("WTF, no usernames for " + title)
+        print("WTF, no usernames for " + title)
         return {}
 
     # The last one is the nominator.
