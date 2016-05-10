@@ -32,12 +32,19 @@ BAD_TEXT = ur'(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DYK)'
 def main():
     "The main function."
     init_logging()
+    verify_data_present()
     args = parse_args()
     wiki = pywikibot.Site("en", "wikipedia")
     wiki.login()
     people_to_notify = get_people_to_notify(wiki)
     people_to_notify = prune_list_of_people(people_to_notify)
     notify_people(people_to_notify, args, wiki)
+
+def verify_data_present():
+    """Check that the already-notified database is there."""
+    if not os.path.isfile(ALREADY_NOTIFIED_FILE):
+        logging.critical("Couldn't locate %s" % ALREADY_NOTIFIED_FILE)
+        sys.exit(1)
 
 def init_logging():
     "Initialize logging."
@@ -123,36 +130,35 @@ def prune_list_of_people(people_to_notify):
     print_people_left("empty entries")
 
     # Prune people I've already notified
-    if os.path.isfile(ALREADY_NOTIFIED_FILE):
-        with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
-            try:
-                already_notified_data = json.load(already_notified_file)
-            except ValueError as error:
-                if error.message != "No JSON object could be decoded":
-                    raise
-                else:
-                    already_notified_data = {}
+    with open(ALREADY_NOTIFIED_FILE) as already_notified_file:
+        try:
+            already_notified_data = json.load(already_notified_file)
+        except ValueError as error:
+            if error.message != "No JSON object could be decoded":
+                raise
+            else:
+                already_notified_data = {}
 
-            # Since the outer dict in the file is keyed on month string,
-            # smush all the values together to get a dict keyed on username
-            already_notified = {}
-            for month_dict in already_notified_data.values():
-                for month_username, month_items in month_dict.items():
-                    already_notified[month_username] =\
-                        already_notified.get(month_username, []) + month_items
+        # Since the outer dict in the file is keyed on month string,
+        # smush all the values together to get a dict keyed on username
+        already_notified = {}
+        for month_dict in already_notified_data.values():
+            for month_username, month_items in month_dict.items():
+                already_notified[month_username] =\
+                    already_notified.get(month_username, []) + month_items
 
-            # Now that we've built a dict, filter the list for each username
-            for username, prior_nominations in already_notified.items():
-                if username not in people_to_notify:
-                    continue
+        # Now that we've built a dict, filter the list for each username
+        for username, prior_nominations in already_notified.items():
+            if username not in people_to_notify:
+                continue
 
-                prior_nominations = [NOMINATION_TEMPLATE + x
-                                     for x in prior_nominations]
-                proposed = set(people_to_notify[username])
-                people_to_notify[username] = list(proposed -
-                                                  set(prior_nominations))
-            people_to_notify = {k: v for k, v in people_to_notify.items() if v}
-            print_people_left("already-notified people")
+            prior_nominations = [NOMINATION_TEMPLATE + x
+                                 for x in prior_nominations]
+            proposed = set(people_to_notify[username])
+            people_to_notify[username] = list(proposed -
+                                              set(prior_nominations))
+        people_to_notify = {k: v for k, v in people_to_notify.items() if v}
+        print_people_left("already-notified people")
 
     # Prune user talk pages that link to this nom.
     for user_talk_page, username in user_talk_pages():
