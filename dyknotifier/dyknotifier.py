@@ -204,11 +204,11 @@ def notify_people(people_to_notify, args, wiki):
 
                 json.dump(already_notified, already_notified_file)
 
-        print("Wrote %d people for %d nominations this month.",
-                     len(already_notified_this_month),
-                     len(functools.reduce(operator.add,
-                                          already_notified_this_month.values(),
-                                          [])))
+        print("Wrote %d people for %d nominations this month." %
+              (len(already_notified_this_month),
+               len(functools.reduce(operator.add,
+                                    already_notified_this_month.values(),
+                                    []))))
 
     notify_iter = zip(people_to_notify.items(),
                       reversed(range(len(people_to_notify))))
@@ -243,8 +243,8 @@ def notify_people(people_to_notify, args, wiki):
             summary = CONFIG.get("dyknotifier", "SUMMARY").format(", ".join(nom_names))
             talkpage.save(appendtext=generate_message(nom_names, wiki),
                           comment=summary)
-            print("Success! Notified %s because of %s. (%d left)",
-                         person, ", ".join(nom_names), counter)
+            print("Success! Notified %s because of %s. (%d left)" %
+                  (person, ", ".join(nom_names), counter))
             people_notified[person] = people_notified.get(person,
                                                           []) + nom_names
         except pywikibot.Error as error:
