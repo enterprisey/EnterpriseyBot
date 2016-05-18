@@ -256,10 +256,8 @@ def notify_people(people_to_notify, args, wiki):
             write_notified_people_to_file()
             raise
         except UnicodeEncodeError:
-            print(u"Unicode encoding error notifying " +\
-                          unicode(person) +\
-                          u" about " + unicode(", ".join(nom_names)) +
-                          u": " + unicode(sys.exc_info()[1]))
+            print("Unicode encoding error notifiying {} about {}: {}".format(person.encode("utf-8"), (", ".join(nom_names)).encode("utf-8"), sys.exc_info()[1].encode("utf-8")))
+
     write_notified_people_to_file()
 
 def get_who_to_nominate(wikitext, title):
