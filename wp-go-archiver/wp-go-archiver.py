@@ -7,6 +7,8 @@ WP_GO_TITLE = "Wikipedia:Goings-on"
 DATE_REGEX = r"\[\[(\w+ \d{1,2})\]\], \[\[(\d{4})\]\]"
 CURRENT_ITEM = r"\*\s?[\s\S]+?\(\d{1,2} \w{3}\)\n"
 
+print("Starting dyknotifier at " + datetime.datetime.utcnow().isoformat())
+
 site = pywikibot.Site("en", "wikipedia")
 site.login()
 
@@ -34,7 +36,6 @@ new_text = current_text
 new_date_text = new_date.strftime("[[%B %-d]], [[%Y]]")
 new_text = re.sub(DATE_REGEX, new_date_text, new_text)
 new_text = re.sub(CURRENT_ITEM, "", new_text)
-print(new_text)
 
 wp_go.text = new_text
 wp_go.save(summary="New week ([[User talk:APerson|Bot]])")
