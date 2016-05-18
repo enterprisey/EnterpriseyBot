@@ -25,6 +25,7 @@ BAD_TEXT = re.compile(r"(Self(-|\s)nominated|Category:((f|F)ailed|(p|P)assed) DY
 
 def main():
     "The main function."
+    print("Starting dyknotifier at " + datetime.utcnow().isoformat())
     read_config()
     verify_data_present()
     args = parse_args()
@@ -38,7 +39,7 @@ def read_config():
     """Read the config file."""
     global CONFIG
     CONFIG = ConfigParser.RawConfigParser()
-    CONFIG.read("config.txt")
+    CONFIG.read("/data/project/apersonbot/bot/dyknotifier/config.txt")
 
 def verify_data_present():
     """Check that the already-notified database is there."""
@@ -275,7 +276,7 @@ def get_who_to_nominate(wikitext, title):
         print("<small> not found in " + title)
         return {}
 
-    soup = BeautifulSoup(wikitext)
+    soup = BeautifulSoup(wikitext, "lxml")
     small_tags = [unicode(x.string) for x in soup.find_all("small")]
     def is_nom_string(text):
         "Is text the line in a DYK nom reading 'Created by... Nominated by...'?"
@@ -292,7 +293,7 @@ def get_who_to_nominate(wikitext, title):
 
     # If there aren't any usernames, WTF and exit
     if len(usernames) == 0:
-        print("WTF, no usernames for " + title)
+        print("WTF, no usernames for " + title.encode("utf-8"))
         return {}
 
     # The last one is the nominator.
