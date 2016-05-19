@@ -2,8 +2,8 @@ import datetime
 import re
 import pywikibot
 
-TEMPLATE_NAME = "Template:Vandalism information"
-COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to %d RPM"
+SUBPAGE_NAME = "User:APersonBot/defcon"
+COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level %d (%d RPM)"
 TEMPLATE_PATH = "/data/project/apersonbot/bot/defcon/template.txt"
 INTERVAL = 60
 
@@ -40,20 +40,33 @@ def calculate_rpm(site):
     return float(num_reverts) / INTERVAL
 
 def is_edit_necessary(template_page, rpm):
-    current_rpm_match = re.search("WikiDefcon/levels\|(\d+)",
+    current_rpm_match = re.search("level\s*=\s*(\d+)",
                                   template_page.get())
     return ((not current_rpm_match) or
             (int(current_rpm_match.group(1)) != int(rpm)))
 
+def rpm_to_level(rpm):
+    if rpm <= 2:
+        return 5
+    elif rpm <= 4:
+        return 4
+    elif rpm <= 6:
+        return 3
+    elif rpm <= 8:
+        return 2
+    else:
+        return 1
+
 def update_template(template_page, rpm):
+    level = rpm_to_level(rpm)
     try:
         template = open(TEMPLATE_PATH)
     except IOError as e:
         print(e)
     else:
         try:
-            template_page.text = template.read() % (int(rpm), rpm)
-            template_page.save(COMMENT % int(rpm))
+            template_page.text = template.read() % (level, rpm)
+            template_page.save(COMMENT % (level, int(rpm)))
         except Exception as e:
             print(e)
         finally:
@@ -62,10 +75,10 @@ def update_template(template_page, rpm):
 def main():
     site = pywikibot.Site("en", "wikipedia")
     site.login()
-    template_page = pywikibot.Page(site, TEMPLATE_NAME)
+    subpage_page = pywikibot.Page(site, SUBPAGE_NAME)
     rpm = calculate_rpm(site)
-    if is_edit_necessary(template_page, rpm):
-        update_template(template_page, rpm)
+    if is_edit_necessary(subpage_page, rpm):
+        update_template(subpage_page, rpm)
     else:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print("[{}] No edit necessary.".format(timestamp))
