@@ -15,6 +15,7 @@ import pywikibot.pagegenerators as pagegenerators
 import re
 import sys
 import time
+import traceback
 
 from bs4 import BeautifulSoup
 from clint.textui import prompt
@@ -225,9 +226,12 @@ def notify_people(people_to_notify, args, wiki):
         # Remove namespaces from the nom names.
         nom_names = [name[34:] for name in nom_names]
 
+        # Format nom names into a string
+        nom_names_string = "".join(name.encode("utf-8") for name in nom_names)
+
         if args.interactive:
-            print("About to notify " + person + " for " +\
-                         ", ".join(nom_names) + ".")
+            print("About to notify {} for {}.".format(person.encode("utf-8"),
+                                                      nom_names_string))
             choice = raw_input("What (s[kip], c[ontinue], q[uit])? ")
             if choice[0] == "s":
                 if prompt.yn("Because I've already notified them?"):
@@ -241,22 +245,21 @@ def notify_people(people_to_notify, args, wiki):
                 sys.exit(0)
         talkpage = pywikibot.Page(wiki, title="User talk:" + person)
         try:
-            summary = CONFIG.get("dyknotifier", "SUMMARY").format(", ".join(nom_names))
+            summary = CONFIG.get("dyknotifier", "SUMMARY").format(nom_names_string)
             talkpage.save(appendtext=generate_message(nom_names, wiki),
                           comment=summary)
             print("Success! Notified %s because of %s. (%d left)" %
-                  (person, ", ".join(nom_names), counter))
+                  (person.encode("utf-8"), nom_names_string, counter))
             people_notified[person] = people_notified.get(person,
                                                           []) + nom_names
         except pywikibot.Error as error:
-            print("Couldn't notify " + person +\
-                          " because of " + ", ".join(nom_names) +
-                          " - result: " + str(error))
+            print("Couldn't notify {} because of {} - result: {}".format(person, nom_names_string, str(error)))
         except (KeyboardInterrupt, SystemExit):
             write_notified_people_to_file()
             raise
         except UnicodeEncodeError as e:
-            print("Unicode encoding error notifiying {} about {}: {}".format(person.encode("utf-8"), (", ".join(nom_names)).encode("utf-8"), str(e)))
+            traceback.print_exc()
+            print("Unicode encoding error notifiying {} about {}: {}".format(person.encode("utf-8"), nom_names_string, str(e)))
 
     write_notified_people_to_file()
 
