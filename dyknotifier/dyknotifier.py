@@ -1,4 +1,4 @@
-"""
+b"""
 A module implementing a bot to notify editors when articles they create or
 expand are nominated for DYK by someone else.
 """
@@ -255,8 +255,8 @@ def notify_people(people_to_notify, args, wiki):
         except (KeyboardInterrupt, SystemExit):
             write_notified_people_to_file()
             raise
-        except UnicodeEncodeError:
-            print("Unicode encoding error notifiying {} about {}: {}".format(person.encode("utf-8"), (", ".join(nom_names)).encode("utf-8"), sys.exc_info()[1].encode("utf-8")))
+        except UnicodeEncodeError as e:
+            print("Unicode encoding error notifiying {} about {}: {}".format(person.encode("utf-8"), (", ".join(nom_names)).encode("utf-8"), str(e)))
 
     write_notified_people_to_file()
 
