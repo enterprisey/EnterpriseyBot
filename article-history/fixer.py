@@ -20,14 +20,14 @@ DELETE_COMMENT = "<!-- Delete this line. -->"
 ARTICLE_HISTORY = re.compile(r"\{\{(article ?history[\s\S]*?)\}\}", flags=re.IGNORECASE)
 ITN = re.compile(r"\{\{(itn talk[\s\S]+?)\}\}", flags=re.IGNORECASE)
 OTD = re.compile(r"\{\{(on this day[\s\S]+?)\}\}", flags=re.IGNORECASE)
-DYK = re.compile(r"\{\{(dyktalk[\s\S]+?)\}\}", flags=re.IGNORECASE)
+DYK = re.compile(r"\{\{(dyk ?talk[\s\S]+?)\}\}", flags=re.IGNORECASE)
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]] merging redundant talk page banners into [[Template:Article history]]."
 
 class History:
     def __init__(self, wikitext):
         """Builds fields from text containing a transclusion."""
         search = ARTICLE_HISTORY.search(wikitext)
-        params = filter(bool, search.group(1).split("|")[1:])
+        params = [x.strip() for x in search.group(1).split("|")[1:] if x.strip()]
         params = {x.strip(): y.strip() for x, y in [t.split("=") for t in params]}
 
         # Actions
