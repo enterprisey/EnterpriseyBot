@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import itertools
+from itertools import ifilterfalse
 import re
 import sys
 from time import mktime
@@ -16,17 +17,17 @@ EXTRA_SUFFIXES = {
     "dyk": ["entry"]
     }
 DELETE_COMMENT = "<!-- Delete this line. -->"
-ARTICLE_HISTORY = re.compile(r"\{\{(article history[\s\S]*?)\}\}",
-                                   flags=re.IGNORECASE)
+ARTICLE_HISTORY = re.compile(r"\{\{(article ?history[\s\S]*?)\}\}", flags=re.IGNORECASE)
 ITN = re.compile(r"\{\{(itn talk[\s\S]+?)\}\}", flags=re.IGNORECASE)
 OTD = re.compile(r"\{\{(on this day[\s\S]+?)\}\}", flags=re.IGNORECASE)
 DYK = re.compile(r"\{\{(dyktalk[\s\S]+?)\}\}", flags=re.IGNORECASE)
+SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]] merging redundant talk page banners into [[Template:Article history]]."
 
 class History:
     def __init__(self, wikitext):
         """Builds fields from text containing a transclusion."""
         search = ARTICLE_HISTORY.search(wikitext)
-        params = search.group(1).split("|")[1:]
+        params = filter(bool, search.group(1).split("|")[1:])
         params = {x.strip(): y.strip() for x, y in [t.split("=") for t in params]}
 
         # Actions
@@ -61,7 +62,9 @@ class History:
             for suffix in suffixes:
                 result += test_and_build(code + suffix)
             if code + "2date" in self.other_parameters:
-                last_num = next(i for i in itertools.count(1) if "%s%ddate" % (code, i) in self.other_parameters)
+                last_num = 2
+                while "%s%ddate" % (code, last_num) in self.other_parameters:
+                    last_num += 1
                 for i, suffix in itertools.product(range(2, last_num + 1), suffixes):
                     result += test_and_build("%s%d%s" % (code, i, suffix))
         result += test_and_build("four", "aciddate", "ftname", "ftmain", "ft2name", "ft2main", "ft3name", "ft3main", "topic", "small")
@@ -84,12 +87,19 @@ class Processor:
         # For use in sorting parameters
         by_time = lambda x: datetime.datetime.fromtimestamp(mktime(Calendar().parse(x[0])[0]))
 
+        lines_to_delete = []
+
         if ITN.search(self.text):
             itn_list = self.get_relevant_params("itn", history)
             for itn_result in ITN.finditer(self.text):
                 itn = itn_result.group(1)
-                itn_list += [(x[x.find("=")+1:], "") for x in itn.split("|")[1:] if "date" in x]
-                self.text = self.text.replace(itn_result.group(0), DELETE_COMMENT)
+                itn_params = itn.split("|")[1:]
+                if "=" not in itn_params[0] and "=" not in itn_params[1]:
+                    # {{ITN talk|DD monthname|YYYY}}
+                    itn_list.append((itn_params[0] + " " + itn_params[1], ""))
+                else:
+                    itn_list += [(x[x.find("=")+1:], "") for x in itn.split("|")[1:] if "date" in x]
+                lines_to_delete.append(itn_result.group(0))
 
             itn_list.sort(key=by_time)
 
@@ -115,7 +125,7 @@ class Processor:
                                          ""))
                     else:
                         break
-                self.text = self.text.replace(otd_result.group(0), DELETE_COMMENT)
+                lines_to_delete.append(otd_result.group(0))
 
             otd_list.sort(key=by_time)
 
@@ -145,14 +155,15 @@ class Processor:
                 history.other_parameters["dykdate"] = month_day + " " + year
 
             # Delete the DYK template
-            self.text = self.text.replace(dyk_search.group(0), DELETE_COMMENT)
+            lines_to_delete.append(dyk_search.group(0))
 
         # Delete the lines with only the delete comment on them
-        self.text = "\n".join(x for x in self.text.splitlines() if x != DELETE_COMMENT)
+        self.text = "\n".join(ifilterfalse(lines_to_delete.__contains__, self.text.splitlines()))
         self.text = self.text.replace(old_ah_wikitext, history.as_wikitext())
         return self.text
 
     def get_relevant_params(self, code, history):
+        """Get the params relevant to the process with the given code in the given article history."""
         current_params = {x: y for x, y in history.other_parameters.items() if code in x}
         result = []
         extra_suffixes = EXTRA_SUFFIXES[code]
@@ -181,13 +192,13 @@ def main():
 
     processor = Processor(page.text)
     page.text = processor.get_processed_text()
-    print(page.text[:page.text.find("==")])
-    #page.save(summary="Bot testing for a BOTREQ request")
+    #print(page.text[:page.text.find("==")])
+    page.save(summary=SUMMARY)
 
-    dump_page = pywikibot.Page(site, "User:APersonBot/sandbox")
-    dump_page.text += "\n\n==Testing article-history (%s)==\n\n" % page_title
-    dump_page.text += page.text[:page.text.find("==")]
-    dump_page.save(summary="Bot testing for a BOTREQ request")
+    #dump_page = pywikibot.Page(site, "User:APersonBot/sandbox")
+    #dump_page.text += "\n\n==Testing article-history (%s)==\n\n" % page_title
+    #dump_page.text += page.text[:page.text.find("==")]
+    #dump_page.save(summary="Bot testing for a BOTREQ request")
 
 if __name__ == "__main__":
     main()
