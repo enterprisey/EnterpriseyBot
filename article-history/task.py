@@ -8,7 +8,7 @@ import time
 
 from clint.textui import prompt
 
-from fixer import Processor
+from fixer import process
 
 REDUNDANT_TEMPLATES = ("on this day", "dyk talk", "itn talk")
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]] merging redundant talk page banners into the article history template."
@@ -63,7 +63,7 @@ else:
 for page in references_gen:
     if has_redundant_templates(page):
         logging.debug("About to process %s." % page.title(withNamespace=True).encode("utf-8"))
-        page.text = Processor(page.text).get_processed_text()
+        page.text = process(page.text)
         if not args.interactive or prompt.yn("Save %s?" % page.title(withNamespace=True).encode("utf-8")):
             page.save(summary=SUMMARY)
             num_edits += 1
