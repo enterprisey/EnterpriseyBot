@@ -21,7 +21,7 @@ ARTICLE_HISTORY = re.compile(r"\{\{(article ?history[\s\S]*?)\}\}", flags=re.IGN
 ITN = re.compile(r"\{\{(itn talk[\s\S]+?)\}\}", flags=re.IGNORECASE)
 OTD = re.compile(r"\{\{(on this day[\s\S]+?)\}\}", flags=re.IGNORECASE)
 DYK = re.compile(r"\{\{(dyk ?talk[\s\S]+?)\}\}", flags=re.IGNORECASE)
-PIPED_LINK = re.compile(r"\[\[[\w ]*?\|[\w ]*?\]\]")
+PIPED_LINK = re.compile(r"\[\[[. ]*?\|[. ]*?\]\]")
 PIPED_LINK_MARKER = "!!!{}!!!"
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]] merging redundant talk page banners into [[Template:Article history]]."
 
