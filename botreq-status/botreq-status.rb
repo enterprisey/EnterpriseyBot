@@ -1,7 +1,9 @@
 require 'io/console'
 require 'mediawiki/butt'
 require 'time'
+require_relative 'marshallable-butt.rb'
 
+LOGIN_STATE_FILE = 'login_state'
 USERNAME = 'APersonBot'
 BOTREQ = 'Wikipedia:Bot requests'
 BOTOP_CAT = 'Category:Wikipedia bot owners'
@@ -17,12 +19,23 @@ OLD_REQUEST_TIME = 60 * SECONDS_IN_DAY # The number of seconds after which a req
 TIME_FORMAT_STRING = '%Y-%m-%d, %H:%M'
 
 # Log in
-$wiki = MediaWiki::Butt.new('https://en.wikipedia.org/w/api.php')
-print "Password for #{USERNAME} on en.wikipedia.org: "
-password = STDIN.noecho(&:gets).chomp
-puts ''
-$wiki.login(USERNAME, password)
-puts "Logged in as #{USERNAME}."
+$wiki = nil
+if File.exists? LOGIN_STATE_FILE
+  puts "Attempting to read login state from #{LOGIN_STATE_FILE}..."
+  $wiki = Marshal.load(File.read(LOGIN_STATE_FILE))
+  puts $wiki
+  puts $wiki.user_bot?
+end
+if !$wiki || !$wiki.user_bot?
+  $wiki = MediaWiki::Butt.new('https://en.wikipedia.org/w/api.php')
+  print "Password for #{USERNAME} on en.wikipedia.org: "
+  password = STDIN.noecho(&:gets).chomp
+  puts ''
+  $wiki.login(USERNAME, password)
+end
+if $wiki.user_bot?
+  puts "Logged in as #{USERNAME}."
+end
 
 # Set up a couple of classes
 class Request
@@ -102,7 +115,8 @@ header = %({| border="1" class="sortable wikitable plainlinks"
 )
 final_text = header + requests.map { |x| x.row }.join('') + "\n|}"
 
-puts "Text generated. Saving to #{REPORT_PAGE}..."
-result = $wiki.edit(REPORT_PAGE, final_text, false, false, 'Generating a status report for BOTREQ')
-print 'Result: '
-puts result
+puts 'done'
+#puts "Text generated. Saving to #{REPORT_PAGE}..."
+#result = $wiki.edit(REPORT_PAGE, final_text, false, false, 'Generating a status report for BOTREQ')
+#print 'Result: '
+#puts result
