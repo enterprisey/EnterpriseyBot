@@ -33,9 +33,7 @@ if !$wiki || !$wiki.user_bot?
   puts ''
   $wiki.login(USERNAME, password)
 end
-if $wiki.user_bot?
-  puts "Logged in as #{USERNAME}."
-end
+puts "Logged in as #{$wiki.get_current_user_name} (bot: #{$wiki.user_bot?})"
 
 # Set up a couple of classes
 class Request
@@ -115,8 +113,11 @@ header = %({| border="1" class="sortable wikitable plainlinks"
 )
 final_text = header + requests.map { |x| x.row }.join('') + "\n|}"
 
-puts 'done'
-#puts "Text generated. Saving to #{REPORT_PAGE}..."
-#result = $wiki.edit(REPORT_PAGE, final_text, false, false, 'Generating a status report for BOTREQ')
-#print 'Result: '
-#puts result
+puts "Text generated. Saving to #{REPORT_PAGE}..."
+
+print 'Press enter to continue...'
+gets
+
+result = $wiki.edit(REPORT_PAGE, final_text, false, false, 'Generating a statusreport for BOTREQ')
+print 'Result: '
+puts result
