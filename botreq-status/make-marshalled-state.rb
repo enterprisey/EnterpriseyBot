@@ -10,7 +10,7 @@ print "Password for #{USERNAME} on en.wikipedia.org: "
 password = STDIN.noecho(&:gets).chomp
 puts ''
 wiki.login(USERNAME, password)
-puts "Logged in as #{USERNAME}."
+puts "Logged in as #{wiki.get_current_user_name} (bot: #{wiki.user_bot?})."
 
 File.open(OUTPUT_FILE, 'wb') do |file|
   file.write(Marshal.dump(wiki))

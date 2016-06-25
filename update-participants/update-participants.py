@@ -75,7 +75,8 @@ def main():
         sys.exit(1)
 
     page.text = update_participants_list(site, page.text)
-    page.save(summary=SUMMARY)
+    print(page.text)
+    #page.save(summary=SUMMARY)
 
 if __name__ == "__main__":
     main()
