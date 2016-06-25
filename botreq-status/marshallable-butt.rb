@@ -9,4 +9,8 @@ class MarshallableButt < MediaWiki::Butt
     @url, @query_limit_default, @uri, @logged_in, @custom_agent, @cookie, @name = array
     @client = HTTPClient.new
   end
+
+  def to_s
+    "#{marshal_dump}"
+  end
 end

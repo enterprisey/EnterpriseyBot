@@ -23,8 +23,9 @@ $wiki = nil
 if File.exists? LOGIN_STATE_FILE
   puts "Attempting to read login state from #{LOGIN_STATE_FILE}..."
   $wiki = Marshal.load(File.read(LOGIN_STATE_FILE))
+  puts "Read state. Now logged in as #{$wiki.get_current_user_name} (bot: #{$wiki.user_bot?})"
+  puts "Current user meta: #{$wiki.get_current_user_meta}"
   puts $wiki
-  puts $wiki.user_bot?
 end
 if !$wiki || !$wiki.user_bot?
   $wiki = MediaWiki::Butt.new('https://en.wikipedia.org/w/api.php')
@@ -34,6 +35,8 @@ if !$wiki || !$wiki.user_bot?
   $wiki.login(USERNAME, password)
 end
 puts "Logged in as #{$wiki.get_current_user_name} (bot: #{$wiki.user_bot?})"
+puts "Current user meta: #{$wiki.get_current_user_meta}"
+puts $wiki
 
 # Set up a couple of classes
 class Request
