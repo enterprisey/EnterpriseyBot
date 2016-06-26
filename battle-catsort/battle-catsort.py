@@ -7,7 +7,7 @@ import time
 
 from clint.textui import prompt
 
-BATTLE_TITLE = re.compile(r"Battle of (.+)")
+BATTLE_TITLE = re.compile(r"^Battle of (.+)")
 CATEGORY = re.compile(r"\[\[Category:(.+?)(?:\|(.+?))?\]\]")
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot 8|Bot]] {} for an article about a battle"
 BATTLE_CATEGORY_KEYWORDS = ("battle", "conflict", "military history", "war", "offensive")
