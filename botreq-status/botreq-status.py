@@ -3,6 +3,7 @@ import itertools
 import mwparserfromhell
 import pywikibot
 import re
+import sys
 
 BOTREQ = "Wikipedia:Bot requests"
 BOTOP_CAT = "Wikipedia bot owners"
@@ -70,6 +71,15 @@ def main():
                     if user:
                         user = user.group(1)
                         break
+
+                # Check for user renames/redirects
+                user_page = pywikibot.Page(wiki, "User:" + user)
+                if user_page.isRedirectPage():
+                    redirect_text = user_page.get(get_redirect=True)
+                    user_wikicode = mwparserfromhell.parse(redirect_text)
+                    redirect_link = user_wikicode.filter_wikilinks()[0]
+                    user = redirect_link.title.split(":")[1]
+
                 signatures.append((user, timestamp))
         r.last_editor, r.last_edit_time = signatures[-1]
         for user, timestamp in reversed(signatures):
