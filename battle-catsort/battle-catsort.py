@@ -61,9 +61,10 @@ def checkEqual(iterator):
     except StopIteration:
         return True
 
-def makeKey(page_title):
+def make_key(page_title):
     """Makes a battle cat key or a defaultsort key."""
     rest_of_title = BATTLE_TITLE.search(page_title).group(1)
+    rest_of_title = re.sub("^the ", "", rest_of_title)
     if re.search(r"^[\w\- ]+$", rest_of_title):
         return rest_of_title
     if re.search(r"^[\w\- ]+\((?:\w+ )?\d+\)$", rest_of_title):
@@ -76,7 +77,7 @@ def process(page_object):
     """Adds appropriate defaultsorts, based on cats."""
     page_title = page_object.title(withNamespace=False)
     wikitext = page_object.get()
-    global_key = makeKey(page_title) # The thing that goes in a defaultsort or a cat key
+    global_key = make_key(page_title) # The thing that goes in a defaultsort or a cat key
     description_of_changes = ""
 
     if "DEFAULTSORT" in wikitext:
