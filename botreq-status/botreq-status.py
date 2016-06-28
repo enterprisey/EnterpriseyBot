@@ -30,8 +30,8 @@ def print_log(what_to_print):
 def make_table_row(r):
     replies = ('style="background: red;" | ' if r.replies == 0 else '') + str(r.replies)
     title = re.sub(r"\[\[(?:.+\|)?(.+)\]\]", r"\1", r.title)
-    if (datetime.datetime.now() - r.last_edit_time).days > 60:
-        r.last_edit_time = 'style="background: red;" | ' + r.last_edit_time.strftime(TIME_FORMAT_STRING)
+    old = (datetime.datetime.now() - r.last_edit_time).days > 60
+    r.last_edit_time = ('style="background: red;" | ' if old else '') + r.last_edit_time.strftime(TIME_FORMAT_STRING)
     if type(r.last_botop_time) is datetime.datetime:
         r.last_botop_time = r.last_botop_time.strftime(TIME_FORMAT_STRING)
     elements = map(unicode, [title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
@@ -58,7 +58,7 @@ def main():
     def section_to_request(section):
         r = Request()
         r.title = section.filter_headings()[0].title.strip()
-        r.replies = unicode(section).count(u"(UTC)")
+        r.replies = unicode(section).count(u"(UTC)") - 1
         signatures = []
         for index, each_node in enumerate(section.nodes):
             if type(each_node) == mwparserfromhell.nodes.text.Text and "(UTC)" in each_node:
