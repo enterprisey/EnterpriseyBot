@@ -6,7 +6,7 @@ import re
 import sys
 
 BOTREQ = "Wikipedia:Bot requests"
-BOTOP_CAT = "Wikipedia bot owners"
+BOTOP_CAT = "Wikipedia bot operators"
 REPORT_PAGE = "User:APersonBot/BOTREQ status"
 HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|APersonBot}}.</noinclude>
 {| border="1" class="sortable wikitable plainlinks"
@@ -81,6 +81,9 @@ def main():
                     user = redirect_link.title.split(":")[1]
 
                 signatures.append((user, timestamp))
+        # Process usernames by removing anchors
+        signatures = [(x.partition('#')[0], y) for x, y in signatures]
+
         r.last_editor, r.last_edit_time = signatures[-1]
         for user, timestamp in reversed(signatures):
             if is_botop(wiki, user):
