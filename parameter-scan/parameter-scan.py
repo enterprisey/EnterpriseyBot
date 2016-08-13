@@ -26,8 +26,9 @@ template = pywikibot.Page(site, TEMPLATE_NAME)
 
 #param_usage = {}
 #param_empty_usage = {}
-types = []
-pages = {}
+#types = []
+#pages = {}
+pages_by_type = {}
 
 references = template.getReferences(onlyTemplateInclusion=True,
                                     namespaces=(0))
@@ -56,7 +57,7 @@ for each_page in progress:
         if param_name.lower() != "type":
             continue
 
-        types += [param_value]
+        pages_by_type[param_value] = pages_by_type.get(param_value, []) + [each_title]
         #pages[each_title] = param_value
         #dictionary = param_usage if param_value else param_empty_usage
         #dictionary[param_name] = dictionary.get(param_name, []) + [each_title]
@@ -65,6 +66,10 @@ for each_page in progress:
 
 #print("\n".join([x + ": " + y for x, y in pages.items()]))
 #sys.exit(0)
+for param_value, page_titles in pages_by_type.items():
+    print("* " + re.sub(r"!(.)", r"|\1", param_value.strip()).encode("utf-8") + " (" + " ".join("[[{}|{}]]".format(item.encode("utf-8"), index + 1) for index, item in enumerate(page_titles)) + ")")
+sys.exit(0)
+
 types = [x.strip().encode("utf-8", "replace") for x in types]
 frequencies = {}
 for each_type in set(types):
