@@ -66,7 +66,7 @@ def main():
         signatures = []
         for index, each_node in enumerate(section.nodes):
             if type(each_node) == mwparserfromhell.nodes.text.Text and "(UTC)" in each_node:
-                timestamp = TIMESTAMP.search(str(each_node)).group(0)
+                timestamp = TIMESTAMP.search(unicode(each_node)).group(0)
                 timestamp = datetime.datetime.strptime(timestamp, SIGNATURE_TIME_FORMAT)
 
                 # Use the last user talk page link before the timestamp
