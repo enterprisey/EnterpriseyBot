@@ -53,6 +53,10 @@ def main():
     wiki.login()
     botreq = pywikibot.Page(wiki, BOTREQ)
     page_content = botreq.text
+
+    # Remove content that mwparserfromhell chokes on
+    page_content = page_content.replace("""[[User:Pppery|<span style="position:relative;top:10px">P</span>p<span style="position:relative;bottom:10px">p</span>e<big style="position:relative;top:10px">r</big>y]]  <big style="position:relative;top:5px">([[User talk:Pppery|talk]])</big>""", "[[User talk:Pppery|talk]]")
+
     wikicode = mwparserfromhell.parse(page_content)
     sections = wikicode.get_sections(include_lead=False, levels=(2,))
     def section_to_request(section):
