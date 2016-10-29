@@ -8,7 +8,7 @@ import sys
 BOTREQ = "Wikipedia:Bot requests"
 BOTOP_CAT = "Wikipedia bot operators"
 REPORT_PAGE = "User:APersonBot/BOTREQ status"
-HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|APersonBot}}.</noinclude>
+TABLE_HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|APersonBot}}.</noinclude>
 {| border="1" class="sortable wikitable plainlinks"
 ! Title !! Replies !! Last editor !! Date/Time !! Last botop editor !! Date/Time
 """
@@ -17,6 +17,7 @@ SUMMARY = "Bot updating BOTREQ status table ({} requests)"
 USER = re.compile(r"\[\[User.*?:(.*?)(?:\||(?:\]\]))")
 TIMESTAMP = re.compile(r"\d{2}:\d{2}, \d{1,2} [A-Za-z]* \d{4}")
 SIGNATURE = re.compile(r"\[\[User.*?\]\].*?\(UTC\)")
+SECTION_HEADER = re.compile(r"== ?([^=]+) ?==")
 
 SIGNATURE_TIME_FORMAT = "%H:%M, %d %B %Y"
 TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
@@ -29,7 +30,7 @@ def print_log(what_to_print):
 
 def make_table_row(r):
     replies = ('style="background: red;" | ' if r.replies == 0 else '') + str(r.replies)
-    title = re.sub(r"\[\[(?:.+\|)?(.+)\]\]", r"\1", r.title)
+    title = re.sub(r"\[\[(?:.+?\|)?(.+?)\]\]", r"\1", r.title)
     old = (datetime.datetime.now() - r.last_edit_time).days > 60
     r.last_edit_time = ('style="background: red;" | ' if old else '') + r.last_edit_time.strftime(TIME_FORMAT_STRING)
     if type(r.last_botop_time) is datetime.datetime:
@@ -54,14 +55,37 @@ def main():
     botreq = pywikibot.Page(wiki, BOTREQ)
     page_content = botreq.text
 
-    # Remove content that mwparserfromhell chokes on
-    page_content = page_content.replace("""[[User:Pppery|<span style="position:relative;top:10px">P</span>p<span style="position:relative;bottom:10px">p</span>e<big style="position:relative;top:10px">r</big>y]]  <big style="position:relative;top:5px">([[User talk:Pppery|talk]])</big>""", "[[User talk:Pppery|talk]]")
+    section_headers = list(SECTION_HEADER.finditer(page_content))
 
-    wikicode = mwparserfromhell.parse(page_content)
-    sections = wikicode.get_sections(include_lead=False, levels=(2,))
-    def section_to_request(section):
+    # If it's not a level-2 header, the char before a match will be "="
+    section_headers = filter(lambda h:page_content[h.start(0) - 1] != "=",
+                             section_headers)
+
+    # Now, build our list of sections
+    sections = []
+    for i, section_header_match in enumerate(section_headers):
+        if i + 1 < len(section_headers):
+            next_section_header = section_headers[i + 1]
+            next_section_start = next_section_header.start(0)
+        else:
+            next_section_start = len(page_content)
+        this_section_end = next_section_start - 1
+        this_section_start = section_header_match.end(0)
+        section_content = page_content[this_section_start:this_section_end]
+        section_content = section_content.strip()
+        section_header = section_header_match.group(1).strip()
+
+        # In the event of duplicates, use "=" to flag duplication
+        while section_header in sections:
+            section_header = "=" + section_header
+
+        sections.append((section_header, section_content))
+
+    def section_to_request(section_tuple):
+        section_header, section_wikitext = section_tuple
+        section = mwparserfromhell.parse(section_wikitext)
         r = Request()
-        r.title = section.filter_headings()[0].title.strip()
+        r.title = section_header
         r.replies = unicode(section).count(u"(UTC)") - 1
         signatures = []
         for index, each_node in enumerate(section.nodes):
@@ -100,7 +124,7 @@ def main():
     print_log("Parsed BOTREQ and made a list of {} requests.".format(len(requests)))
     table_rows = map(make_table_row, requests)
     table = "\n".join(table_rows) + "\n|}"
-    wikitext = HEADER + table
+    wikitext = TABLE_HEADER + table
 
     report_page = pywikibot.Page(wiki, REPORT_PAGE)
     report_page.text = wikitext
