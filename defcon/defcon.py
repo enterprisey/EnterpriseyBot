@@ -39,11 +39,16 @@ def calculate_rpm(site):
             num_reverts += 1
     return float(num_reverts) / INTERVAL
 
-def is_edit_necessary(template_page, rpm):
-    current_rpm_match = re.search("level\s*=\s*(\d+)",
-                                  template_page.get())
-    return ((not current_rpm_match) or
-            (int(current_rpm_match.group(1)) != int(rpm)))
+def is_edit_necessary(template_page, current_rpm):
+    """Is the current level different from the one currently on the template?"""
+    current_level = rpm_to_level(current_rpm)
+    onwiki_level_match = re.search("level\s*=\s*(\d+)",
+                                   template_page.get())
+    if onwiki_level_match:
+        onwiki_level = int(current_rpm_match.group(1))
+        return onwiki_level != current_level
+    else:
+        return True
 
 def rpm_to_level(rpm):
     if rpm <= 2:
