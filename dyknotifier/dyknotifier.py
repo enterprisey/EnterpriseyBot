@@ -1,4 +1,4 @@
-b"""
+"""
 A module implementing a bot to notify editors when articles they create or
 expand are nominated for DYK by someone else.
 """
