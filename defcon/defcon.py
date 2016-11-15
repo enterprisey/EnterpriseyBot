@@ -45,7 +45,7 @@ def is_edit_necessary(template_page, current_rpm):
     onwiki_level_match = re.search("level\s*=\s*(\d+)",
                                    template_page.get())
     if onwiki_level_match:
-        onwiki_level = int(current_rpm_match.group(1))
+        onwiki_level = int(onwiki_level_match.group(1))
         return onwiki_level != current_level
     else:
         return True
