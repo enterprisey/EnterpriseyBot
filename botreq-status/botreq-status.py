@@ -68,7 +68,7 @@ def main():
             next_section_header = section_headers[i + 1]
             next_section_start = next_section_header.start(0)
         else:
-            next_section_start = len(page_content)
+            next_section_start = len(page_content) + 1
         this_section_end = next_section_start - 1
         this_section_start = section_header_match.end(0)
         section_content = page_content[this_section_start:this_section_end]
