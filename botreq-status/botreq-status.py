@@ -112,13 +112,15 @@ def main():
         # Process usernames by removing anchors
         signatures = [(x.partition('#')[0], y) for x, y in signatures]
 
-        r.last_editor, r.last_edit_time = signatures[-1]
-        for user, timestamp in reversed(signatures):
-            if is_botop(wiki, user):
-                r.last_botop_editor, r.last_botop_time = user, timestamp
-                break
-        else:
-            r.last_botop_editor, r.last_botop_time = "{{no result|None}}", "{{n/a}}"
+        # Default values for everything
+        r.last_editor, r.last_edit_time = r.last_botop_editor, r.last_botop_time = "{{no result|None}}", "{{n/a}}"
+
+        if signatures:
+            r.last_editor, r.last_edit_time = signatures[-1]
+            for user, timestamp in reversed(signatures):
+                if is_botop(wiki, user):
+                    r.last_botop_editor, r.last_botop_time = user, timestamp
+                    break
         return r
     requests = map(section_to_request, sections)
     print_log("Parsed BOTREQ and made a list of {} requests.".format(len(requests)))
