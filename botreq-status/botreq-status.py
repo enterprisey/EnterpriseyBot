@@ -7,8 +7,8 @@ import sys
 
 BOTREQ = "Wikipedia:Bot requests"
 BOTOP_CAT = "Wikipedia bot operators"
-REPORT_PAGE = "User:APersonBot/BOTREQ status"
-TABLE_HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|APersonBot}}.</noinclude>
+REPORT_PAGE = "User:EnterpriseyBot/BOTREQ status"
+TABLE_HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|EnterpriseyBot}}.</noinclude>
 {| border="1" class="sortable wikitable plainlinks"
 ! Title !! Replies !! Last editor !! Date/Time !! Last botop editor !! Date/Time
 """
@@ -90,8 +90,13 @@ def main():
         signatures = []
         for index, each_node in enumerate(section.nodes):
             if type(each_node) == mwparserfromhell.nodes.text.Text and "(UTC)" in each_node:
-                timestamp = TIMESTAMP.search(unicode(each_node)).group(0)
-                timestamp = datetime.datetime.strptime(timestamp, SIGNATURE_TIME_FORMAT)
+
+                # Get the last timestamp-looking thing (trick from http://stackoverflow.com/a/2988680/1757964)
+                for timestamp_match in TIMESTAMP.finditer(unicode(each_node)): pass
+                try:
+                    timestamp = datetime.datetime.strptime(timestamp_match.group(0), SIGNATURE_TIME_FORMAT)
+                except ValueError:
+                    timestamp = "{{unknown}}"
 
                 # Use the last user talk page link before the timestamp
                 for user_index in itertools.count(index - 1, -1):
