@@ -1,5 +1,5 @@
 import argparse
-import logging
+import datetime
 import pywikibot
 import pywikibot.pagegenerators as generators
 import re
@@ -13,13 +13,16 @@ from fixer import process
 REDUNDANT_TEMPLATES = ("on this day", "dyk talk", "itn talk")
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]] merging redundant talk page banners into the article history template."
 
-# LOGIN
-# ----
+def print_log(info):
+    print("[{}] {}".format(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), info))
+
+print_log("Starting article-history at " + datetime.datetime.utcnow().isoformat())
+
+# Log in
 site = pywikibot.Site("en", "wikipedia")
 site.login()
 
-# PARSE ARGUMENTS
-# ----
+# Parse args
 parser = argparse.ArgumentParser()
 parser.add_argument("-i", "--interactive", action="store_true",
                     help="Confirm before each edit.")
@@ -29,21 +32,7 @@ parser.add_argument("-l", "--limit", type=int,
                     help="Stop making edits at this number.")
 args = parser.parse_args()
 
-# INITIALIZE LOGGING
-# ----
-# Trick from http://stackoverflow.com/a/6321221/1757964
-logging.Formatter.converter = time.gmtime
-
-logging.basicConfig(filename='task.log',
-                    level=logging.DEBUG,
-                    datefmt="%Y-%m-%dT%H:%M:%SZ",
-                    format="[%(asctime)s] [%(levelname)s] %(message)s")
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-logging.getLogger().addHandler(stream_handler)
-
-# SET UP PAGE STREAM
-# ----
+# Set up refs gen
 article_history = pywikibot.Page(site, "Template:Article history")
 references_args = {"onlyTemplateInclusion": True, "namespaces": (1), "content": True}
 references_gen = article_history.getReferences(**references_args)
@@ -57,19 +46,19 @@ def has_redundant_templates(page):
 
 if args.count:
     num_edits = args.count
-    logging.info("Starting off with %d edits made." % num_edits)
+    print_log("Starting off with %d edits made." % num_edits)
 else:
     num_edits = 0
 for page in references_gen:
     if has_redundant_templates(page):
-        logging.debug("About to process %s." % page.title(withNamespace=True).encode("utf-8"))
+        print("About to process %s." % page.title(withNamespace=True).encode("utf-8"))
         page.text = process(page.text)
         if not args.interactive or prompt.yn("Save %s?" % page.title(withNamespace=True).encode("utf-8")):
             page.save(summary=SUMMARY)
             num_edits += 1
-            logging.info("%d edits made so far." % num_edits)
+            print_log("%d edits made so far." % num_edits)
             if args.limit and num_edits >= args.limit:
-                logging.info("%d edits (limit) reached; done." % num_edits)
+                print_log("%d edits (limit) reached; done." % num_edits)
                 sys.exit(0)
         elif prompt.yn("Exit?"):
             sys.exit(0)

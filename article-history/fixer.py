@@ -88,6 +88,7 @@ class History:
 def encode_wikilinks(wikitext):
     """Return the wikitext with piped links moved into a dictionary."""
     wikilinks = PIPED_LINK.findall(wikitext)
+    print(str(len(wikilinks)) + " wikilinks found by encode_wikilinks.")
     for index, wikilink in enumerate(wikilinks):
         wikitext = wikitext.replace(wikilink, PIPED_LINK_MARKER.format(index))
     return wikitext, wikilinks
