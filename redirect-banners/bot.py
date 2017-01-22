@@ -1,8 +1,11 @@
 import datetime
+import mwparserfromhell
 import pywikibot
 import sys
 
 SOFT_REDIR_CATS = "Wikipedia soft redirected categories"
+NUM_PAGES = 1
+SUMMARY = "Bot removing the article quality assessment"
 
 def verify_redirect_age(site, page):
     """Returns True iff the page was a redirect/nonexistent a week ago."""
@@ -16,6 +19,9 @@ def verify_redirect_age(site, page):
     earliest_revid = page.getVersionHistory(reverse=True)[0].revid
     earliest_text = page.getOldVersion(earliest_revid)
     return "#REDIRECT" in earliest_text
+
+def is_wikiproject_banner(template):
+    return unicode(template.name).lower().startswith("wikiproject")
 
 def main():
     site = pywikibot.Site("en", "wikipedia")
@@ -34,18 +40,28 @@ def main():
             talk_page = each_article.toggleTalkPage()
             if not talk_page.exists(): continue
             talk_text = talk_page.get()
-            if not talk_text.trim().startswith("{{"): continue
-            print("\n--- " + talk_page.title(withNamespace=False) + " ---")
-            print(talk_page.get()[:500])
-            # Here:
-            #  - find and remove the class and importance params
-            #  - put them in a comment
-            #  - save page
+            parse_result = mwparserfromhell.parse(talk_page.get())
+            original_talk_text = talk_text
+            for each_template in parse_result.ifilter_templates():
+                if is_wikiproject_banner(each_template):
+                    importance_params = [x for x in each_template.params if "importance" in x.lower()]
+                    if importance_params:
+                        if len(importance_params) != 1:
+                            print("Multiple importance params in " + talk_page.title(withNamespace=True))
+                        else:
+                            current_unicode = unicode(each_template)
+                            each_template.remove(importance_params[0].partition("=")[0])
+                            old_quality = importance_params[0].partition("=")[1]
+                            new_unicode = unicode(each_template)
+                            talk_text = talk_text.replace(current_unicode,
+                                new_unicode + " <!-- Formerly assessed as " + old_quality + " -->")
+            talk_page.text = talk_text
+            talk_page.save(summary=SUMMARY)
             i += 1
-            if i > 4:
+            if i > NUM_PAGES:
                 break
 
-        if i > 4:
+        if i > NUM_PAGES:
             break
 
 if __name__ == "__main__":
