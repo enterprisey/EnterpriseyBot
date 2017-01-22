@@ -44,14 +44,14 @@ def main():
             original_talk_text = talk_text
             for each_template in parse_result.ifilter_templates():
                 if is_wikiproject_banner(each_template):
-                    importance_params = [x for x in each_template.params if "importance" in x.lower()]
-                    if importance_params:
-                        if len(importance_params) != 1:
-                            print("Multiple importance params in " + talk_page.title(withNamespace=True))
+                    class_params = [x for x in each_template.params if "class" in x.lower()]
+                    if class_params:
+                        if len(class_params) != 1:
+                            print("Multiple class params in " + talk_page.title(withNamespace=True))
                         else:
                             current_unicode = unicode(each_template)
-                            each_template.remove(importance_params[0].partition("=")[0])
-                            old_quality = importance_params[0].partition("=")[1]
+                            each_template.remove(class_params[0].partition("=")[0])
+                            old_quality = class_params[0].partition("=")[1]
                             new_unicode = unicode(each_template)
                             talk_text = talk_text.replace(current_unicode,
                                 new_unicode + " <!-- Formerly assessed as " + old_quality + " -->")
