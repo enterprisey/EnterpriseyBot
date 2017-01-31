@@ -4,8 +4,8 @@ import pywikibot
 import sys
 
 SOFT_REDIR_CATS = "Wikipedia soft redirected categories"
-NUM_PAGES = 1
-SUMMARY = "Bot removing the article quality assessment"
+NUM_PAGES = 6
+SUMMARY = "[[Wikipedia:Bots/Requests for approval/EnterpriseyBot 10|Bot]] removing the article class assessment"
 
 def verify_redirect_age(site, page):
     """Returns True iff the page was a redirect/nonexistent a week ago."""
@@ -20,8 +20,16 @@ def verify_redirect_age(site, page):
     earliest_text = page.getOldVersion(earliest_revid)
     return "#REDIRECT" in earliest_text
 
-def is_wikiproject_banner(template):
-    return unicode(template.name).lower().startswith("wikiproject")
+def is_wikiproject_banner_full(template, wpbs_redirects):
+    sanitized_name = unicode(template.name).lower()
+    return sanitized_name.startswith("wikiproject") and sanitized_name not in wpbs_redirects
+
+def get_wpbs_redirects(site):
+    wpbs = pywikibot.Page(site, "Template:WikiProject banner shell")
+    return [page.title(withNamespace=False).lower()
+            for page
+            in wpbs.getReferences(redirectsOnly=True)
+            if page.namespace() == 10]
 
 def main():
     site = pywikibot.Site("en", "wikipedia")
@@ -31,37 +39,47 @@ def main():
 
     i = 0
 
+    wpbs_redirects = get_wpbs_redirects(site)
+    print(wpbs_redirects)
+    is_wikiproject_banner = lambda template: is_wikiproject_banner_full(template, wpbs_redirects)
+
     for redirect_cat in all_redirect_cats.subcategories():
         if redirect_cat.title(withNamespace=False) == SOFT_REDIR_CATS:
             continue
 
         for each_article in redirect_cat.articles(recurse=True, namespaces=(0)):
+            print(unicode("Considering \"{}\".").format(each_article.title()))
             if not verify_redirect_age(site, each_article): continue
             talk_page = each_article.toggleTalkPage()
-            if not talk_page.exists(): continue
+            if not talk_page.exists() or talk_page.isRedirectPage(): continue
             talk_text = talk_page.get()
-            parse_result = mwparserfromhell.parse(talk_page.get())
+            parse_result = mwparserfromhell.parse(talk_text)
             original_talk_text = talk_text
-            for each_template in parse_result.ifilter_templates():
-                if is_wikiproject_banner(each_template):
-                    class_params = [x for x in each_template.params if "class" in x.lower()]
-                    if class_params:
-                        if len(class_params) != 1:
-                            print("Multiple class params in " + talk_page.title(withNamespace=True))
-                        else:
-                            current_unicode = unicode(each_template)
-                            each_template.remove(class_params[0].partition("=")[0])
-                            old_quality = class_params[0].partition("=")[1]
-                            new_unicode = unicode(each_template)
-                            talk_text = talk_text.replace(current_unicode,
-                                new_unicode + " <!-- Formerly assessed as " + old_quality + " -->")
-            talk_page.text = talk_text
-            talk_page.save(summary=SUMMARY)
-            i += 1
-            if i > NUM_PAGES:
-                break
+            talk_banners = filter(is_wikiproject_banner, parse_result.filter_templates())
+            if not talk_banners: continue
+            for each_template in talk_banners:
+                class_params = [x for x in each_template.params if "class" in x.lower()]
+                if class_params:
+                    if len(class_params) != 1:
+                        print("Multiple class params in " + talk_page.title(withNamespace=True))
+                    else:
+                        current_unicode = unicode(each_template)
+                        print(current_unicode)
+                        each_template.remove(class_params[0].partition("=")[0])
+                        old_quality = class_params[0].partition("=")[2]
+                        new_unicode = unicode(each_template)
+                        new_unicode += " <!-- Formerly assessed as " + old_quality.strip() + "-class -->"
+                        print(new_unicode)
+                        talk_text = talk_text.replace(current_unicode, new_unicode)
+            if talk_page.text != talk_text:
+                talk_page.text = talk_text
+                talk_page.save(summary=SUMMARY)
+                i += 1
+                print("{} out of {} done so far.".format(i, NUM_PAGES))
+                if i >= NUM_PAGES:
+                    break
 
-        if i > NUM_PAGES:
+        if i >= NUM_PAGES:
             break
 
 if __name__ == "__main__":
