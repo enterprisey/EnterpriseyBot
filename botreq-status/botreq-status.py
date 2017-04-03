@@ -30,11 +30,17 @@ def print_log(what_to_print):
 
 def make_table_row(r):
     replies = ('style="background: red;" | ' if r.replies == 0 else '') + str(r.replies)
+
+    # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
     title = re.sub(r"\[\[(?:.+?\|)?(.+?)\]\]", r"\1", r.title)
-    old = (datetime.datetime.now() - r.last_edit_time).days > 60
-    r.last_edit_time = ('style="background: red;" | ' if old else '') + r.last_edit_time.strftime(TIME_FORMAT_STRING)
+
+    if type(r.last_edit_time) is datetime.datetime:
+        old = (datetime.datetime.now() - r.last_edit_time).days > 60
+        r.last_edit_time = ('style="background: red;" | ' if old else '') + r.last_edit_time.strftime(TIME_FORMAT_STRING)
+
     if type(r.last_botop_time) is datetime.datetime:
         r.last_botop_time = r.last_botop_time.strftime(TIME_FORMAT_STRING)
+
     elements = map(unicode, [title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
     return u"|-\n| [[WP:Bot requests#{0}|{0}]] || {1} || {2} || {3} || {4} || {5}".format(*elements)
 
