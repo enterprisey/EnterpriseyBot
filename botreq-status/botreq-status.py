@@ -34,7 +34,7 @@ def make_table_row(r):
     # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
     title = re.sub(r"\[\[(?:.+?\|)?(.+?)\]\]", r"\1", r.title)
 
-    encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "", "]": "", "|": "", "{": "", "}": "", "_": ""}
+    encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "%5B", "]": "%5D", "|": "%7C", "{": "%7B", "}": "%7D", "_": "%7C"}
     target = re.sub("[{}]".format("".join(map(re.escape, encodings.keys()))), lambda match: encodings[match.group(0)], title)
 
     if type(r.last_edit_time) is datetime.datetime:
