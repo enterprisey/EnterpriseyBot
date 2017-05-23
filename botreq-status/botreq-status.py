@@ -34,6 +34,9 @@ def make_table_row(r):
     # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
     title = re.sub(r"\[\[(?:.+?\|)?(.+?)\]\]", r"\1", r.title)
 
+    encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "", "]": "", "|": "", "{": "", "}": "", "_": ""}
+    target = re.sub("[{}]".format("".join(map(re.escape, encodings.keys()))), lambda match: encodings[match.group(0)], title)
+
     if type(r.last_edit_time) is datetime.datetime:
         old = (datetime.datetime.now() - r.last_edit_time).days > 60
         r.last_edit_time = ('style="background: red;" | ' if old else '') + r.last_edit_time.strftime(TIME_FORMAT_STRING)
@@ -41,8 +44,8 @@ def make_table_row(r):
     if type(r.last_botop_time) is datetime.datetime:
         r.last_botop_time = r.last_botop_time.strftime(TIME_FORMAT_STRING)
 
-    elements = map(unicode, [title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
-    return u"|-\n| [[WP:Bot requests#{0}|{0}]] || {1} || {2} || {3} || {4} || {5}".format(*elements)
+    elements = map(unicode, [target, title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
+    return u"|-\n| [[WP:Bot requests#{}|{}]] || {} || {} || {} || {} || {}".format(*elements)
 
 botop_cache = {}
 def is_botop(wiki, username):
