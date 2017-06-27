@@ -31,11 +31,26 @@ def print_log(what_to_print):
 def make_table_row(r):
     replies = ('style="background: red;" | ' if r.replies == 0 else '') + str(r.replies)
 
-    # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
-    title = re.sub(r"\[\[(?:.+?\|)?(.+?)\]\]", r"\1", r.title)
+    # Utility function for processing
+    def take_inner(regex, text):
+        """
+	Given a regex with exactly one capturing group and some text,
+	return the text after all occurrences of the regex have been
+	replaced with the group.
 
+	Example: take_inner("a(.)a", "aba") == "b"
+	"""
+	return re.sub(regex, r"\1", text)
+
+    # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
+    title = take_inner(r"\[\[(?:.+?\|)?(.+?)\]\]", r.title)
+
+    # Escape some characters in the link target
     encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "%5B", "]": "%5D", "|": "%7C", "{": "%7B", "}": "%7D", "_": "%7C"}
     target = re.sub("[{}]".format("".join(map(re.escape, encodings.keys()))), lambda match: encodings[match.group(0)], title)
+
+    # Remove formatting in the link target
+    target = take_inner(r"''([^']+)''", take_inner(r"'''([^']+)'''", target))
 
     if type(r.last_edit_time) is datetime.datetime:
         old = (datetime.datetime.now() - r.last_edit_time).days > 60
