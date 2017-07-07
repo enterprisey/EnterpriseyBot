@@ -1,10 +1,11 @@
 import datetime
 import mwparserfromhell
 import pywikibot
+import re
 import sys
 
 SOFT_REDIR_CATS = "Wikipedia soft redirected categories"
-NUM_PAGES = 6
+NUM_PAGES = 2
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/EnterpriseyBot 10|Bot]] removing the article class assessment"
 
 def verify_redirect_age(site, page):
@@ -58,15 +59,22 @@ def main():
             talk_banners = filter(is_wikiproject_banner, parse_result.filter_templates())
             if not talk_banners: continue
             for each_template in talk_banners:
-                class_params = [x for x in each_template.params if "class" in x.lower()]
+                class_params = [x for x in each_template.params
+                        if ("class" in x.lower() and
+                        "formerly assessed as" not in x.lower())]
                 if class_params:
                     if len(class_params) != 1:
                         print("Multiple class params in " + talk_page.title(withNamespace=True))
                     else:
                         current_unicode = unicode(each_template)
-                        print(current_unicode)
                         each_template.remove(class_params[0].partition("=")[0])
+
                         old_quality = class_params[0].partition("=")[2]
+                        if not re.match("\w+$", old_quality.strip()):
+                            print("Invalid class!")
+                            continue
+
+                        print(current_unicode)
                         new_unicode = unicode(each_template)
                         new_unicode += " <!-- Formerly assessed as " + old_quality.strip() + "-class -->"
                         print(new_unicode)
