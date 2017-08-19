@@ -10,7 +10,7 @@ BOTOP_CAT = "Wikipedia bot operators"
 REPORT_PAGE = "User:EnterpriseyBot/BOTREQ status"
 TABLE_HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|EnterpriseyBot}}.</noinclude>
 {| border="1" class="sortable wikitable plainlinks"
-! Title !! Replies !! Last editor !! Date/Time !! Last botop editor !! Date/Time
+! # !! Title !! Replies !! Last editor !! Date/Time !! Last botop editor !! Date/Time
 """
 SUMMARY = "Bot updating BOTREQ status table ({} requests)"
 
@@ -42,6 +42,9 @@ def make_table_row(r):
 	"""
 	return re.sub(regex, r"\1", text)
 
+    # Row number
+    row_number = r.row_number
+
     # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
     title = take_inner(r"\[\[(?:.+?\|)?(.+?)\]\]", r.title)
 
@@ -59,8 +62,8 @@ def make_table_row(r):
     if type(r.last_botop_time) is datetime.datetime:
         r.last_botop_time = r.last_botop_time.strftime(TIME_FORMAT_STRING)
 
-    elements = map(unicode, [target, title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
-    return u"|-\n| [[WP:Bot requests#{}|{}]] || {} || {} || {} || {} || {}".format(*elements)
+    elements = map(unicode, [row_number, target, title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
+    return u"|-\n| {} || [[WP:Bot requests#{}|{}]] || {} || {} || {} || {} || {}".format(*elements)
 
 botop_cache = {}
 def is_botop(wiki, username):
@@ -105,10 +108,12 @@ def main():
 
         sections.append((section_header, section_content))
 
-    def section_to_request(section_tuple):
+    def section_to_request(enumerated_section_tuple):
+        enum_number, section_tuple = enumerated_section_tuple
         section_header, section_wikitext = section_tuple
         section = mwparserfromhell.parse(section_wikitext)
         r = Request()
+        r.row_number = enum_number + 1
         r.title = section_header
         r.replies = unicode(section).count(u"(UTC)") - 1
         signatures = []
@@ -151,7 +156,10 @@ def main():
                     r.last_botop_editor, r.last_botop_time = user, timestamp
                     break
         return r
-    requests = map(section_to_request, sections)
+
+    # Why enumerate? Because we need row numbers in the table
+    requests = map(section_to_request, enumerate(sections))
+
     print_log("Parsed BOTREQ and made a list of {} requests.".format(len(requests)))
     table_rows = map(make_table_row, requests)
     table = "\n".join(table_rows) + "\n|}"
