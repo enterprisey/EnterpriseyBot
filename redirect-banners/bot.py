@@ -7,6 +7,7 @@ import sys
 SOFT_REDIR_CATS = "Wikipedia soft redirected categories"
 NUM_PAGES = 2
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/EnterpriseyBot 10|Bot]] removing the article class assessment"
+DATA_FILE = "current-progress.txt"
 
 def verify_redirect_age(site, page):
     """Returns True iff the page was a redirect/nonexistent a week ago."""
@@ -37,17 +38,38 @@ def main():
     site = pywikibot.Site("en", "wikipedia")
     site.login()
 
-    all_redirect_cats = pywikibot.Category(site, "All redirect categories")
-
     i = 0
 
     wpbs_redirects = get_wpbs_redirects(site)
-    print(wpbs_redirects)
     is_wikiproject_banner = lambda template: is_wikiproject_banner_full(template, wpbs_redirects)
 
-    for redirect_cat in all_redirect_cats.subcategories():
+    # If we have a data file, pick up where we left off
+    try:
+        with open(DATA_FILE) as data_file:
+            start_sort = data_file.read()
+            print(start_sort)
+    except IOError:
+        start_sort = ""
+
+    # We always write our progress to the previous category, to avoid
+    # skipping any pages
+    previous_category = None
+
+    # Because PWB won't let us use hex keys, build our own generator.
+    # Random argument keys come from site.py in Pywikibot (specifically,
+    # the site.categorymembers() and site._generator() functions)
+    gen_args = {"gcmtitle": "Category:All_redirect_categories",
+            "gcmprop": "title",
+            "gcmstartsortkeyprefix": start_sort}
+    members_gen = pywikibot.data.api.PageGenerator("categorymembers", site=site, parameters=gen_args)
+    for redirect_cat in members_gen:
         if redirect_cat.title(withNamespace=False) == SOFT_REDIR_CATS:
             continue
+
+        # Record which subcat we were in for the next run
+        if previous_category:
+            with open(DATA_FILE, "w") as data_file:
+                data_file.write(previous_category.title(withNamespace=False))
 
         for each_article in redirect_cat.articles(recurse=True, namespaces=(0)):
             print("Considering \"{}\".".format(each_article.title().encode("utf-8")))
@@ -87,6 +109,8 @@ def main():
                 print("{} out of {} done so far.".format(i, NUM_PAGES))
                 if i >= NUM_PAGES:
                     break
+
+        previous_category = redirect_cat
 
         if i >= NUM_PAGES:
             break
