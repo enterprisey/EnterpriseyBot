@@ -49,7 +49,7 @@ def make_table_row(r):
     title = take_inner(r"\[\[(?:.+?\|)?(.+?)\]\]", r.title)
 
     # Escape some characters in the link target
-    encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "%5B", "]": "%5D", "|": "%7C", "{": "%7B", "}": "%7D", "_": "%7C"}
+    encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "%5B", "]": "%5D", "|": "%7C", "{": "%7B", "}": "%7D"}
     target = re.sub("[{}]".format("".join(map(re.escape, encodings.keys()))), lambda match: encodings[match.group(0)], title)
 
     # Remove formatting in the link target
