@@ -48,6 +48,9 @@ def make_table_row(r):
     # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
     title = take_inner(r"\[\[(?:.+?\|)?(.+?)\]\]", r.title)
 
+    # Nested external links also won't work
+    title = take_inner(r"\[http[^ ]+? (.+?)\]", title)
+
     # Escape some characters in the link target
     encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "%5B", "]": "%5D", "|": "%7C", "{": "%7B", "}": "%7D"}
     target = re.sub("[{}]".format("".join(map(re.escape, encodings.keys()))), lambda match: encodings[match.group(0)], title)
