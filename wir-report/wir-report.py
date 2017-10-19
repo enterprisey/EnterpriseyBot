@@ -10,8 +10,8 @@ CSD_SUMMARY = re.compile(r"CSD|(^|\s+)(G|A)\d\d?($|[^\d])|db-\w|Nominated\spage\
 CSD_RULE_SUMMARY = re.compile(r"((?:G|A)\d\d?)|(db-.+)(?:\||\}\})")
 CSD_TEMPLATE = re.compile(r"\{\{(db-\w+).+?\}\}")
 
-REPORT_PAGE = "User:EnterpriseyBot/WiR CSD report"
-SUMMARY = "Bot generating CSD report for WiR"
+REPORT_PAGE = "User:EnterpriseyBot/WiR report"
+SUMMARY = "Bot generating report for WiR"
 
 NUM_ARTICLES = 10
 catName = u'Category:Candidates for speedy deletion'
