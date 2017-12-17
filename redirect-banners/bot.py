@@ -8,6 +8,10 @@ SOFT_REDIR_CATS = "Wikipedia soft redirected categories"
 NUM_PAGES = 2
 SUMMARY = "[[Wikipedia:Bots/Requests for approval/EnterpriseyBot 10|Bot]] removing the article class assessment"
 DATA_FILE = "current-progress.txt"
+WP_BANNER_SHELL = "WikiProject banner shell"
+
+# Don't touch parameters of these banners
+UNTOUCHABLE_BANNERS = ("WikiProject Anime and manga")
 
 def verify_redirect_age(site, page):
     """Returns True iff the page was a redirect/nonexistent a week ago."""
@@ -22,15 +26,36 @@ def verify_redirect_age(site, page):
     earliest_text = page.getOldVersion(earliest_revid)
     return "#REDIRECT" in earliest_text
 
-def is_wikiproject_banner_full(template, wpbs_redirects):
-    sanitized_name = unicode(template.name).lower()
-    return sanitized_name.startswith("wikiproject") and sanitized_name not in wpbs_redirects
+class TemplateChecker:
+    def __init__(self, site):
+        """Initializes the internal list of templates to avoid
+        changing."""
+        wpbs_redirects = get_template_redirects(site, WP_BANNER_SHELL)
+        untouchable_templates = (redir
+                for banner in UNTOUCHABLE_BANNERS
+                for redir in get_template_redirects(site, banner))
+        self.names_to_avoid = set(wpbs_redirects +
+                untouchable_templates)
 
-def get_wpbs_redirects(site):
-    wpbs = pywikibot.Page(site, "Template:WikiProject banner shell")
+    def check(self, template_name):
+        """Returns True if we are allowed to alter the parameters of a
+        template with template_name, and False otherwise."""
+        sanitized_name = unicode(template.name).lower().strip()
+        return sanitized_name.startswith("wikiproject") and
+            sanitized_name not in self.names_to_avoid
+
+def get_template_redirects(site, template_name):
+    """Gets the names of all of the template-space redirects to the
+    provided template. The names come without namespaces.
+
+    Example, if `site` is a enwiki site object:
+    >>> get_template_redicts(site, "Hexadecimal")
+    [u'hexdigit']
+    """
+    template_page = pywikibot.Page(site, "Template:" + template_name)
     return [page.title(withNamespace=False).lower()
             for page
-            in wpbs.getReferences(redirectsOnly=True)
+            in template_page.getReferences(redirectsOnly=True)
             if page.namespace() == 10]
 
 def main():
@@ -40,8 +65,7 @@ def main():
 
     i = 0
 
-    wpbs_redirects = get_wpbs_redirects(site)
-    is_wikiproject_banner = lambda template: is_wikiproject_banner_full(template, wpbs_redirects)
+    checker = TemplateChecker()
 
     # If we have a data file, pick up where we left off
     try:
@@ -79,7 +103,7 @@ def main():
             talk_text = talk_page.get()
             parse_result = mwparserfromhell.parse(talk_text)
             original_talk_text = talk_text
-            talk_banners = filter(is_wikiproject_banner, parse_result.filter_templates())
+            talk_banners = filter(checker.check, parse_result.filter_templates())
             if not talk_banners: continue
             for each_template in talk_banners:
                 class_params = [x for x in each_template.params
