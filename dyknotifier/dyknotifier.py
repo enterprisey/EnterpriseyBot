@@ -90,12 +90,15 @@ def prune_list_of_people(people_to_notify):
     # ... one purely for logging purposes,
     def print_people_left(what_was_removed):
         "Print the number of people left after removing something."
-        print("%d people for %d noms left after removing %s." %
-              (len(people_to_notify),
-               len(functools.reduce(operator.add,
-                                    people_to_notify.values(),
-                                    [])),
-               what_was_removed))
+
+        # This has been made a no-op for performance.
+        pass
+        #print("%d people for %d noms left after removing %s." %
+        #      (len(people_to_notify),
+        #       len(functools.reduce(operator.add,
+        #                            people_to_notify.values(),
+        #                            [])),
+        #       what_was_removed))
 
     # ... and another simply to save keystrokes.
     def user_talk_pages():
@@ -116,6 +119,14 @@ def prune_list_of_people(people_to_notify):
     # Prune empty entries
     people_to_notify = {k: v for k, v in people_to_notify.items() if k}
     print_people_left("empty entries")
+
+    # Prune talk pages that don't exist
+    user_talk_titles = ["User talk:" + name for name in people_to_notify.keys()]
+    titles_gen = pagegenerators.PagesFromTitlesGenerator(user_talk_titles)
+    usernames_without_talk_pages = [page.title(withNamespace=False)
+            for page in titles_gen]
+    for each_username in usernames_without_talk_pages:
+        del people_to_notify[each_username]
 
     # Prune people I've already notified
     with open(CONFIG.get("dyknotifier", "ALREADY_NOTIFIED_FILE")) as already_notified_file:
@@ -257,9 +268,10 @@ def notify_people(people_to_notify, args, wiki):
         except (KeyboardInterrupt, SystemExit):
             write_notified_people_to_file()
             raise
-        except UnicodeEncodeError as e:
+        except UnicodeEncodeError as error2:
             traceback.print_exc()
-            print("Unicode encoding error notifiying {} about {}: {}".format(person.encode("utf-8"), nom_names_string, str(e)))
+            print("Unicode encoding error notifiying {} about {}: {}".format(
+                    person.encode("utf-8"), nom_names_string, str(error2)))
 
     write_notified_people_to_file()
 
