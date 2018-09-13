@@ -4,7 +4,7 @@ import pywikibot
 import re
 import sys
 
-from clint.textui import progress
+#from clint.textui import progress
 
 TEMPLATE_NAME = "Template:Infobox Fraternity"
 TEMPLATE_REGEX = r"\{\{Infobox(\s|_)Fraternity(\{\{.+\}\}|[\s\S])+?\}\}"
@@ -32,11 +32,11 @@ pages_by_type = {}
 
 references = template.getReferences(onlyTemplateInclusion=True,
                                     namespaces=(0))
-progress = progress.bar(references, expected_size=TEMPLATE_TRANSCLUSIONS)
+#progress = progress.bar(references, expected_size=TEMPLATE_TRANSCLUSIONS)
 
 #i = 0
 
-for each_page in progress:
+for each_page in references: #progress:
     #if i > 10: break
     each_title = each_page.title(withNamespace=True)
     each_text = each_page.get()
@@ -67,8 +67,13 @@ for each_page in progress:
 #print("\n".join([x + ": " + y for x, y in pages.items()]))
 #sys.exit(0)
 for param_value, page_titles in pages_by_type.items():
-    print("* " + re.sub(r"!(.)", r"|\1", param_value.strip()).encode("utf-8") + " (" + " ".join("[[{}|{}]]".format(item.encode("utf-8"), index + 1) for index, item in enumerate(page_titles)) + ")")
+    fixed_param_value = param_value.strip()
+    print("* " + re.sub(r"!(.)", r"|\1", fixed_param_value) +
+            " (" + " ".join("[[{}|{}]]".format(item, index + 1)
+                for index, item in enumerate(page_titles)) + ")")
 sys.exit(0)
+
+##############################################################################
 
 types = [x.strip().encode("utf-8", "replace") for x in types]
 frequencies = {}
