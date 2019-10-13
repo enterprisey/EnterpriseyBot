@@ -3,7 +3,7 @@ import re
 import pywikibot
 
 SUBPAGE_NAME = "User:EnterpriseyBot/defcon"
-COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level %d (%d RPM)"
+COMMENT = "[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level %d (%d RPM) #DEFCON%d"
 TEMPLATE_PATH = "/data/project/apersonbot/bot/defcon/template.txt"
 INTERVAL = 60
 
