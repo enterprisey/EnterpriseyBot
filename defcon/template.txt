@@ -1,5 +1,5 @@
 {{#switch: {{{1}}}
   | level = %d
   | sign = ~~~~~
-  | info = %.2f RPM according to [[User:APersonBot|APersonBot]]
+  | info = %.2f RPM according to [[User:EnterpriseyBot|EnterpriseyBot]]
 }}
