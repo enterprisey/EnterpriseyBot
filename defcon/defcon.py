@@ -71,7 +71,7 @@ def update_template(template_page, rpm):
     else:
         try:
             template_page.text = template.read() % (level, rpm)
-            template_page.save(COMMENT % (level, int(rpm)))
+            template_page.save(COMMENT % (level, int(rpm), level))
         except Exception as e:
             print(e)
         finally:
