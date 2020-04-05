@@ -7,6 +7,8 @@ use lazy_static::lazy_static;
 use mediawiki::api::Api;
 use regex::Regex;
 
+mod fixed_api;
+
 static VANDALISM_KEYWORDS: [&str; 8] = ["revert", "rv ", "long-term abuse", "long term abuse",
     "lta", "abuse", "rvv ", "undid"];
 static NOT_VANDALISM_KEYWORDS: [&str; 12] = ["uaa", "good faith", "agf", "unsourced",
@@ -55,7 +57,7 @@ fn reverts_per_minute(api: &Api) -> Result<f32, Box<dyn Error>> {
         ("rclimit", "100"),
         ("rcshow", "!bot"),
     ]);
-    let res = api.get_query_api_json_all(&query)?;
+    let res = fixed_api::get_query_api_json_limit(&api, &query, /* limit */ None)?;
     let num_reverts = res["query"]["recentchanges"]
         .as_array()
         .unwrap()
