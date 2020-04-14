@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    convert::TryInto,
     error::Error,
     fmt,
     fs::{File, OpenOptions},
@@ -20,7 +21,6 @@ use regex::Regex;
 
 static ISO_8601_FMT: &str = "%Y-%m-%dT%H:%M:%SZ";
 static SUMMARY: &str = "[[Wikipedia:Bots/Requests for approval/EnterpriseyBot 10|Bot]] removing the article class assessment";
-const NUM_EDITS_PER_SESSION: usize = 1;
 
 lazy_static! {
     static ref REGEX: Regex = Regex::new(r"(?xs) # enable comments, allow . to match \n
@@ -199,6 +199,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let username = config.get_str("username")?;
     let password = config.get_str("password")?;
 
+    let num_edits_per_session: usize = config.get_int("edits_per_session")?.try_into()?;
     let progress_filename = config.get_str("progress_file")?;
 
     let mut api = Api::new("https://en.wikipedia.org/w/api.php")?;
@@ -242,7 +243,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if new_text != text {
                         edit_list.push((page.title().clone(), new_text));
                         println!("WILL EDIT {:?}", page.title());
-                        if edit_list.len() >= NUM_EDITS_PER_SESSION {
+                        if edit_list.len() >= num_edits_per_session {
                             break 'main_loop;
                         }
                     }
