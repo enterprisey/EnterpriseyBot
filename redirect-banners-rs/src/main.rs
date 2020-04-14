@@ -33,7 +33,7 @@ lazy_static! {
         # capturing groups 2-n are the values of the 'class' parameters
         (?:
             # a class parameter
-            (\|\s*class\s*=\s*(.+?)\s*)
+            (\|\s*class\s*=\s*([^\|]+?)\s*)
             |
             # maybe some other parameters
             \|[^\|]+?
@@ -168,6 +168,12 @@ pub fn process_text(mut text: String, banned_templates: &Vec<String>) -> String 
             continue;
         }
 
+        if let Some((start, end)) = locs.get(3) {
+            if start == end {
+                continue;
+            }
+        }
+
         // Schedule edits deleting the class params
         let num_class_params = (locs.len() - 2) / 2;
         for class_param_idx in 0..num_class_params {
@@ -261,7 +267,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    if let Some((title, _)) = edit_list.get(edit_list.len() - 1) {
+    if let Some((title, _)) = edit_list.get(edit_list.len().saturating_sub(1)) {
         save_progress(progress_filename, title.pretty().to_string())?;
     }
 
@@ -277,6 +283,10 @@ mod tests {
 
     #[test]
     fn test_process_text() {
+        assert_eq!(process_text("{{WikiProject X|importance=}}".to_string(), &vec![]),
+            "{{WikiProject X|importance=}}");
+        assert_eq!(process_text("{{WikiProject X|class=|importance=}}".to_string(), &vec![]),
+            "{{WikiProject X|class=|importance=}}");
         assert_eq!(process_text("{{Wikiproject Cars|class=Foo}}".to_string(), &vec![]),
             "{{Wikiproject Cars}}<!-- Formerly assessed as Foo-class -->");
         assert_eq!(process_text("{{Wikiproject Cars|a|class=Foo}}".to_string(), &vec![]),

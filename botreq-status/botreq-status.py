@@ -17,7 +17,7 @@ SUMMARY = "Bot updating BOTREQ status table ({} requests)"
 USER = re.compile(r"\[\[User.*?:(.*?)(?:\||(?:\]\]))")
 TIMESTAMP = re.compile(r"\d{2}:\d{2}, \d{1,2} [A-Za-z]* \d{4}")
 SIGNATURE = re.compile(r"\[\[User.*?\]\].*?\(UTC\)")
-SECTION_HEADER = re.compile(r"== ?([^=]+) ?==")
+SECTION_HEADER = re.compile(r"^==\s*(.+?)\s*==$", flags=re.M)
 
 SIGNATURE_TIME_FORMAT = "%H:%M, %d %B %Y"
 TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
@@ -34,13 +34,13 @@ def make_table_row(r):
     # Utility function for processing
     def take_inner(regex, text):
         """
-	Given a regex with exactly one capturing group and some text,
-	return the text after all occurrences of the regex have been
-	replaced with the group.
+        Given a regex with exactly one capturing group and some text,
+        return the text after all occurrences of the regex have been
+        replaced with the group.
 
-	Example: take_inner("a(.)a", "aba") == "b"
-	"""
-	return re.sub(regex, r"\1", text)
+        Example: take_inner("a(.)a", "aba") == "b"
+        """
+        return re.sub(regex, r"\1", text)
 
     # Row number
     row_number = r.row_number
@@ -74,22 +74,22 @@ def is_botop(wiki, username):
         return botop_cache[username]
 
     userpage = pywikibot.Page(wiki, "User:" + username)
-    result = any(x.title(withNamespace=False) == BOTOP_CAT for x in userpage.categories())
+    result = any(x.title(with_ns=False) == BOTOP_CAT for x in userpage.categories())
     botop_cache[username] = result
     return result
 
 def main():
     print_log("Starting botreq-status at " + datetime.datetime.utcnow().isoformat())
     wiki = pywikibot.Site("en", "wikipedia")
-    wiki.login()
+    #wiki.login() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     botreq = pywikibot.Page(wiki, BOTREQ)
     page_content = botreq.text
 
     section_headers = list(SECTION_HEADER.finditer(page_content))
 
     # If it's not a level-2 header, the char before a match will be "="
-    section_headers = filter(lambda h:page_content[h.start(0) - 1] != "=",
-                             section_headers)
+    section_headers = list(filter(lambda h:page_content[h.start(0) - 1] != "=",
+                             section_headers))
 
     # Now, build our list of sections
     sections = []
@@ -118,13 +118,13 @@ def main():
         r = Request()
         r.row_number = enum_number + 1
         r.title = section_header
-        r.replies = unicode(section).count(u"(UTC)") - 1
+        r.replies = section.count(u"(UTC)") - 1
         signatures = []
         for index, each_node in enumerate(section.nodes):
             if type(each_node) == mwparserfromhell.nodes.text.Text and "(UTC)" in each_node:
 
                 # Get the last timestamp-looking thing (trick from http://stackoverflow.com/a/2988680/1757964)
-                for timestamp_match in TIMESTAMP.finditer(unicode(each_node)): pass
+                for timestamp_match in TIMESTAMP.finditer(str(each_node)): pass
                 try:
                     timestamp = datetime.datetime.strptime(timestamp_match.group(0), SIGNATURE_TIME_FORMAT)
                 except ValueError:
@@ -132,7 +132,7 @@ def main():
 
                 # Use the last user talk page link before the timestamp
                 for user_index in itertools.count(index - 1, -1):
-                    user = USER.search(unicode(section.get(user_index)))
+                    user = USER.search(str(section.get(user_index)))
                     if user:
                         user = user.group(1)
                         break
@@ -163,14 +163,16 @@ def main():
     # Why enumerate? Because we need row numbers in the table
     requests = map(section_to_request, enumerate(sections))
 
-    print_log("Parsed BOTREQ and made a list of {} requests.".format(len(requests)))
+    num_requests = len(list(requests))
+    print_log("Parsed BOTREQ and made a list of {} requests.".format(num_requests))
     table_rows = map(make_table_row, requests)
     table = "\n".join(table_rows) + "\n|}"
     wikitext = TABLE_HEADER + table
 
     report_page = pywikibot.Page(wiki, REPORT_PAGE)
     report_page.text = wikitext
-    report_page.save(summary=SUMMARY.format(len(requests)))
+    print(wikitext)
+    #report_page.save(summary=SUMMARY.format(num_requests))
     print_log("Saved {}.".format(REPORT_PAGE))
 
 if __name__ == "__main__":
