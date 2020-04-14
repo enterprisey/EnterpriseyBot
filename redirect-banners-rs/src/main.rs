@@ -169,7 +169,7 @@ pub fn process_text(mut text: String, banned_templates: &Vec<String>) -> String 
         }
 
         if let Some((start, end)) = locs.get(3) {
-            if start == end {
+            if (&text[start..end]).trim().is_empty() {
                 continue;
             }
         }
@@ -287,6 +287,8 @@ mod tests {
             "{{WikiProject X|importance=}}");
         assert_eq!(process_text("{{WikiProject X|class=|importance=}}".to_string(), &vec![]),
             "{{WikiProject X|class=|importance=}}");
+        assert_eq!(process_text("{{WikiProject X|class= |importance=}}".to_string(), &vec![]),
+            "{{WikiProject X|class= |importance=}}");
         assert_eq!(process_text("{{Wikiproject Cars|class=Foo}}".to_string(), &vec![]),
             "{{Wikiproject Cars}}<!-- Formerly assessed as Foo-class -->");
         assert_eq!(process_text("{{Wikiproject Cars|a|class=Foo}}".to_string(), &vec![]),
