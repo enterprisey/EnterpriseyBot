@@ -75,10 +75,17 @@ fn check_redirect_age(api: &Api, title: &Title) -> Result<bool, Box<dyn Error>> 
         ("rvstart", &one_week_ago),
         ("formatversion", "2"),
     ]))?;
-    Ok(res["query"]["pages"][0]["revisions"][0]["slots"]["main"]["content"].as_str()
-        .ok_or(BotError::new(format!("bad API response (check_redirect_age): {:?}", res)))?
-        .to_ascii_lowercase()
-        .contains("#redirect"))
+    let page = &res["query"]["pages"][0];
+    if page["missing"].as_bool() == Some(true) {
+        Err(Box::new(BotError::new(format!("missing page (check_redirect_age), title {}", title))))
+    } else if page["revisions"].is_null() {
+        Ok(false) // page just didn't exist a week ago
+    } else {
+        Ok(page["revisions"][0]["slots"]["main"]["content"].as_str()
+            .ok_or(BotError::new(format!("bad API response (check_redirect_age): {:?}", res)))?
+            .to_ascii_lowercase()
+            .contains("#redirect"))
+    }
 }
 
 /// Gets a list of all templates that redirect to the given set of templates.
