@@ -4,7 +4,11 @@ use std::error::Error;
 use chrono::{prelude::*, Duration};
 use config;
 use lazy_static::lazy_static;
-use mediawiki::api::Api;
+use mediawiki::{
+    api::Api,
+    page::Page,
+    title::Title,
+};
 use regex::Regex;
 
 static VANDALISM_KEYWORDS: [&str; 8] = ["revert", "rv ", "long-term abuse", "long term abuse",
@@ -13,7 +17,6 @@ static NOT_VANDALISM_KEYWORDS: [&str; 12] = ["uaa", "good faith", "agf", "unsour
     "unreferenced", "self", "speculat", "original research", "rv tag", "typo", "incorrect", "format"];
 static ISO_8601_FMT: &str = "%Y-%m-%dT%H:%M:%SZ";
 static INTERVAL_IN_MINS: i64 = 60;
-static PAGE_NAME: &str = "User:EnterpriseyBot/defcon";
 
 lazy_static! {
     static ref SECTION_HEADER_RE: Regex = Regex::new(r"/\*[\s\S]+?\*/").unwrap();
@@ -52,7 +55,6 @@ fn reverts_per_minute(api: &Api) -> Result<f32, Box<dyn Error>> {
         ("rcend", &end_str),
         ("rcprop", "comment"),
         ("rclimit", "100"),
-        ("rcshow", "!bot"),
     ]);
     let res = api.get_query_api_json_all(&query)?;
     let num_reverts = res["query"]["recentchanges"]
@@ -78,33 +80,6 @@ fn rpm_to_level(rpm: f32) -> u8 {
     }
 }
 
-fn get_page_text(api: &Api, title: &str) -> Result<String, Box<dyn Error>> {
-    let res = api.get_query_api_json(&make_map(&[
-        ("action", "query"),
-        ("prop", "revisions"),
-        ("titles", title),
-        ("rvprop", "content"),
-        ("rvslots", "main"),
-    ]))?;
-    Ok(res["query"]["pages"]
-        .as_object().ok_or("no json object under result.query.pages")?
-        .values().next().ok_or("no pages returned")?
-        ["revisions"][0]["slots"]["main"]["*"].as_str()
-        .ok_or("page content wasn't a string")?.to_string())
-}
-
-fn set_page_text(api: &mut Api, title: &str, new_text: String, summary: String) -> Result<(), Box<dyn Error>> {
-    let token = api.get_edit_token().unwrap();
-    api.post_query_api_json(&make_map(&[
-        ("action", "edit"),
-        ("title", title),
-        ("text", new_text.as_str()),
-        ("token", &token),
-        ("summary", &summary),
-    ]))?;
-    Ok(())
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let mut config = config::Config::default();
     config
@@ -116,8 +91,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut api = Api::new("https://en.wikipedia.org/w/api.php")?;
     api.login(username, password)?;
 
+    api.set_user_agent(format!("EnterpriseyBot/defcon-rs/{} (https://en.wikipedia.org/wiki/User:EnterpriseyBot; apersonwiki@gmail.com)", env!("CARGO_PKG_VERSION")));
+
     // get current on-wiki defcon level
-    let curr_text = get_page_text(&api, PAGE_NAME)?;
+    let report_page = config.get_str("report_page")?;
+    let page = Page::new(Title::new_from_full(&report_page, &api));
+    let curr_text = page.text(&api)?;
     let curr_level = if let Some(captures) = LEVEL_RE.captures(&curr_text) {
         captures.get(1).unwrap().as_str().parse::<u8>().unwrap()
     } else {
@@ -135,7 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
               | info = {:.2} RPM according to [[User:EnterpriseyBot|EnterpriseyBot]]
             }}}}", level, rpm);
     let summary = format!("[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level {0} ({1:.2} RPM) #DEFCON{0}", level, rpm);
-        set_page_text(&mut api, PAGE_NAME, text, summary)?;
+        page.edit_text(&mut api, text, summary)?;
     }
     Ok(())
 }
