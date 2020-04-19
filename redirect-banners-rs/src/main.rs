@@ -28,15 +28,15 @@ lazy_static! {
 
         # capturing group 1: template name (should start with 'wikiproject', case-insensitive)
         # note the | at the end
-        ([Ww][Ii][Kk][Ii][Pp][Rr][Oo][Jj][Ee][Cc][Tt][^\|]*?)
+        ([Ww][Ii][Kk][Ii][Pp][Rr][Oo][Jj][Ee][Cc][Tt][^\|\}]*?)
 
         # capturing groups 2-n are the values of the 'class' parameters
         (?:
             # a class parameter
-            (\|\s*class\s*=\s*([^\|]+?)\s*)
+            (\|\s*class\s*=\s*([^\|\}]+?)\s*)
             |
             # maybe some other parameters
-            \|[^\|]+?
+            \|[^\|\}]+?
         )+? # must have at least one class parameter
 
         \}\}").expect("invalid regex");
@@ -283,14 +283,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 mod tests {
     use super::*;
 
+    fn assert_unchanged(text: impl Into<String>, banned: &Vec<String>) {
+        let text = text.into();
+        assert_eq!(process_text(text.clone(), banned), text);
+    }
+
     #[test]
     fn test_process_text() {
-        assert_eq!(process_text("{{WikiProject X|importance=}}".to_string(), &vec![]),
-            "{{WikiProject X|importance=}}");
-        assert_eq!(process_text("{{WikiProject X|class=|importance=}}".to_string(), &vec![]),
-            "{{WikiProject X|class=|importance=}}");
-        assert_eq!(process_text("{{WikiProject X|class= |importance=}}".to_string(), &vec![]),
-            "{{WikiProject X|class= |importance=}}");
+        assert_unchanged("{{WikiProject X|importance=}}", &vec![]);
+        assert_unchanged("{{WikiProject X|class=|importance=}}", &vec![]);
+        assert_unchanged("{{WikiProject X|class= |importance=}}", &vec![]);
         assert_eq!(process_text("{{Wikiproject Cars|class=Foo}}".to_string(), &vec![]),
             "{{Wikiproject Cars}}<!-- Formerly assessed as Foo-class -->");
         assert_eq!(process_text("{{Wikiproject Cars|a|class=Foo}}".to_string(), &vec![]),
@@ -299,6 +301,11 @@ mod tests {
             "{{Wikiproject Cars|a}}<!-- Formerly assessed as Foo-class -->");
         assert_eq!(process_text("{{Wikiproject Cars|a|class=Foo|b}}".to_string(), &vec![]),
             "{{Wikiproject Cars|a|b}}<!-- Formerly assessed as Foo-class -->");
+    }
+
+    #[test]
+    fn test_process_text_more() {
+        assert_unchanged("{{WikiProject Astronomy|object=yes|importance=|class=}}\n{{WikiProject Solar System|class=|importance=}}", &vec![]);
     }
 
     #[test]
