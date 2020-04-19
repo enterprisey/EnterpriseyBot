@@ -40,6 +40,7 @@ lazy_static! {
         )+? # must have at least one class parameter
 
         \}\}").expect("invalid regex");
+    static ref NOVELS_WIKIPROJECT_REGEX: Regex = Regex::new("(?i)NovelsWikiProject").expect("invalid regex");
 }
 
 fn make_map(params: &[(&str, &str)]) -> HashMap<String, String> {
@@ -252,6 +253,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let page = Page::new(title);
             match page.text(&api) {
                 Ok(text) => {
+                    let text = NOVELS_WIKIPROJECT_REGEX.replace(&text, "WikiProject Novels").to_string();
                     let new_text = process_text(text.clone(), &banned_templates);
                     if new_text != text {
                         edit_list.push((page.title().clone(), new_text));
