@@ -28,7 +28,8 @@ fn make_map(params: &[(&str, &str)]) -> HashMap<String, String> {
 }
 
 fn is_revert_of_vandalism(edit_summary: &str) -> bool {
-    let edit_summary = SECTION_HEADER_RE.replace(edit_summary, "");
+    let edit_summary = SECTION_HEADER_RE.replace(edit_summary, "")
+        .to_ascii_lowercase();
     for not_vand_kwd in NOT_VANDALISM_KEYWORDS.iter() {
         if edit_summary.contains(not_vand_kwd) {
             return false;
@@ -61,7 +62,7 @@ fn reverts_per_minute(api: &Api) -> Result<f32, Box<dyn Error>> {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|edit| is_revert_of_vandalism(edit["comment"].as_str().unwrap_or("")))
+        .filter(|edit| edit["comment"].as_str().map_or(false, is_revert_of_vandalism))
         .count();
     Ok((num_reverts as f32) / (INTERVAL_IN_MINS as f32))
 }
@@ -113,7 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
               | sign = ~~~~~
               | info = {:.2} RPM according to [[User:EnterpriseyBot|EnterpriseyBot]]
             }}}}", level, rpm);
-    let summary = format!("[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level {0} ({1:.2} RPM) #DEFCON{0}", level, rpm);
+        let summary = format!("[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level {0} ({1:.2} RPM) #DEFCON{0}", level, rpm);
         page.edit_text(&mut api, text, summary)?;
     }
     Ok(())
