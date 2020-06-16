@@ -148,7 +148,7 @@ pub fn process_text(mut text: String, banned_templates: &Vec<String>) -> String 
         //println!("{} groups {}", line!(), (0..2 * locs.len()).map(|idx| locs.get(idx).map(|(start, end)| &text[start..end]).unwrap_or("None")).collect::<Vec<_>>().join(","));
         //println!("{} whole match {}", line!(), &text[locs.get(0).unwrap().0..locs.get(0).unwrap().1]);
 
-        let mut template_name = (&text[locs.get(1).unwrap().0..locs.get(1).unwrap().1]).to_string();
+        let mut template_name = (&text[locs.get(1).unwrap().0..locs.get(1).unwrap().1]).trim().to_string();
 
         // Increment the offset to ensure that we keep progressing through the string
         let new_offset = locs.get(1).unwrap().1;
@@ -310,10 +310,11 @@ mod tests {
 
     #[test]
     fn test_process_text_wpbs() {
+        let wpbs = vec!["wikiproject banner shell".to_string()];
         assert_eq!(process_text("{{WikiProject banner shell|1=
 {{WikiProject New York City |class=redirect |importance=NA}}
 {{WikiProject Streetcars |NYPT=yes |class=NA |importance=NA}}
-}}".to_string(), &vec!["wikiproject banner shell".to_string()]),
+}}".to_string(), &wpbs),
             "{{WikiProject banner shell|1=
 {{WikiProject New York City |importance=NA}}<!-- Formerly assessed as redirect-class -->
 {{WikiProject Streetcars |NYPT=yes |importance=NA}}<!-- Formerly assessed as NA-class -->
@@ -324,12 +325,24 @@ mod tests {
 {{WikiProject Streetcars |NYPT=yes |class=NA |importance=NA}}
 {{WikiProject Buses |NYPT=yes |class=redirect |importance=NA}}
 }}
-".to_string(), &vec!["wikiproject banner shell".to_string()]),
+".to_string(), &wpbs),
             "{{Talk header}}
 {{WikiProject banner shell|1=
 {{WikiProject New York City |importance=NA}}<!-- Formerly assessed as redirect-class -->
 {{WikiProject Streetcars |NYPT=yes |importance=NA}}<!-- Formerly assessed as NA-class -->
 {{WikiProject Buses |NYPT=yes |importance=NA}}<!-- Formerly assessed as redirect-class -->
+}}
+");
+        assert_eq!(process_text("{{Talk page of redirect}}
+{{WikiProject banner shell |1=
+{{WikiProject Film|class=Redirect|American=yes|Filmmaking=yes}}
+{{WikiProject Michigan|class=Redirect|Detroit=yes}}
+}}
+".to_string(), &wpbs),
+            "{{Talk page of redirect}}
+{{WikiProject banner shell |1=
+{{WikiProject Film|American=yes|Filmmaking=yes}}<!-- Formerly assessed as Redirect-class -->
+{{WikiProject Michigan|Detroit=yes}}<!-- Formerly assessed as Redirect-class -->
 }}
 ");
     }
