@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let summary = format!("[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level {0} ({1:.2} RPM) #DEFCON{0}", level, rpm);
         page.edit_text(&mut api, text, summary).await?;
     } else {
-        println!("No edit necessary.");
+        // No edit necessary
     }
     Ok(())
 }
