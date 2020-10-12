@@ -45,7 +45,7 @@ fn is_revert_of_vandalism(edit_summary: &str) -> bool {
     false
 }
 
-fn reverts_per_minute(api: &Api) -> Result<f32, Box<dyn Error>> {
+async fn reverts_per_minute(api: &Api) -> Result<f32, Box<dyn Error>> {
     let time_one_interval_ago = Utc::now() - Duration::minutes(INTERVAL_IN_MINS);
     let end_str = time_one_interval_ago.format(ISO_8601_FMT).to_string();
     let query = make_map(&[
@@ -57,7 +57,7 @@ fn reverts_per_minute(api: &Api) -> Result<f32, Box<dyn Error>> {
         ("rcprop", "comment"),
         ("rclimit", "100"),
     ]);
-    let res = api.get_query_api_json_all(&query)?;
+    let res = api.get_query_api_json_all(&query).await?;
     let num_reverts = res["query"]["recentchanges"]
         .as_array()
         .unwrap()
@@ -81,7 +81,8 @@ fn rpm_to_level(rpm: f32) -> u8 {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let mut config = config::Config::default();
     config
         .merge(config::File::with_name("settings"))?
@@ -89,15 +90,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let username = config.get_str("username")?;
     let password = config.get_str("password")?;
 
-    let mut api = Api::new("https://en.wikipedia.org/w/api.php")?;
-    api.login(username, password)?;
+    let mut api = Api::new("https://en.wikipedia.org/w/api.php").await?;
+    api.login(username, password).await?;
 
     api.set_user_agent(format!("EnterpriseyBot/defcon-rs/{} (https://en.wikipedia.org/wiki/User:EnterpriseyBot; apersonwiki@gmail.com)", env!("CARGO_PKG_VERSION")));
 
     // get current on-wiki defcon level
     let report_page = config.get_str("report_page")?;
     let page = Page::new(Title::new_from_full(&report_page, &api));
-    let curr_text = page.text(&api)?;
+    let curr_text = page.text(&api).await?;
     let curr_level = if let Some(captures) = LEVEL_RE.captures(&curr_text) {
         captures.get(1).unwrap().as_str().parse::<u8>().unwrap()
     } else {
@@ -105,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // compute current defcon level
-    let rpm = reverts_per_minute(&api)?;
+    let rpm = reverts_per_minute(&api).await?;
     let level = rpm_to_level(rpm);
 
     if curr_level != level {
@@ -115,7 +116,7 @@ fn main() -> Result<(), Box<dyn Error>> {
               | info = {:.2} RPM according to [[User:EnterpriseyBot|EnterpriseyBot]]
             }}}}", level, rpm);
         let summary = format!("[[Wikipedia:Bots/Requests for approval/APersonBot 5|Bot]] updating vandalism level to level {0} ({1:.2} RPM) #DEFCON{0}", level, rpm);
-        page.edit_text(&mut api, text, summary)?;
+        page.edit_text(&mut api, text, summary).await?;
     } else {
         println!("No edit necessary.");
     }
