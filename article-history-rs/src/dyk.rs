@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::Template;
-use crate::common::{flatten_cow, ToParams};
+use crate::common::ToParams;
 
 use ureq;
 
@@ -78,9 +78,11 @@ pub fn parse_dyk_template<'a>(article_title: &str, template: &'a Template) -> Re
         } else {
             template.unnamed.get(1)
         })
-        .map(flatten_cow);
+        .map(String::as_ref)
+        .map(Cow::Borrowed);
     let nompage: Option<Cow<'_, _>> = template.named.get("nompage")
-        .map(flatten_cow) // MOO!
+        .map(String::as_ref)
+        .map(Cow::Borrowed)
         .or_else(|| try_get_nompage(article_title).map(Cow::Owned));
     Ok(DykEntry { date, hook, nompage })
 }

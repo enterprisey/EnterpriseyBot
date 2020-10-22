@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     error::Error,
 };
@@ -27,13 +26,13 @@ enum TemplateType {
 }
 
 #[derive(Debug)]
-pub struct Template<'a> {
+pub struct Template {
     name: TemplateType,
-    unnamed: Vec<Cow<'a, str>>,
-    named: linked_hash_map::LinkedHashMap<String, Cow<'a, str>>,
+    unnamed: Vec<String>,
+    named: linked_hash_map::LinkedHashMap<String, String>,
 }
 
-fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str, template_name_map: &HashMap<String, TemplateType>) -> Vec<Template<'a>> {
+fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str, template_name_map: &HashMap<String, TemplateType>) -> Vec<Template> {
     let output = Configuration::default().parse(wikitext);
     assert!(
         output
@@ -82,8 +81,8 @@ fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str, template_na
                             ));
                         (param_name, param_value)
                     }).partition(|(name, _value)| name.is_some());
-                let named = named.into_iter().map(|(name, value)| (name.unwrap().into_owned(), value)).collect();
-                let unnamed = unnamed.into_iter().map(|(_name, value)| value).collect();
+                let named = named.into_iter().map(|(name, value)| (name.unwrap().into_owned(), value.into_owned())).collect();
+                let unnamed = unnamed.into_iter().map(|(_name, value)| value.into_owned()).collect();
                 Some(Template {
                     name: template_type,
                     unnamed,
@@ -176,9 +175,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 TemplateType::ArticleHistory => unreachable!(),
             }
         }
-    }
-    for (key, value) in article_history.named {
-        value = value.into_owned();
     }
     println!("{:#?}", article_history);
     std::mem::drop(article_history);

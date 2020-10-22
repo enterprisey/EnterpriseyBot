@@ -11,12 +11,20 @@ pub fn flatten_cow<'a, T: 'a + ToOwned + ?Sized>(c: &'a Cow<'_, T>) -> Cow<'a, T
     Cow::Borrowed(c.as_ref())
 }
 
-pub fn get_template_param_2<'a, 'b>(template: &'a Template<'_>, key1: impl Into<Cow<'b, str>>, key2: impl Into<Cow<'b, str>>) -> &'a str {
-    template.named.get(key1.into().as_ref()).map_or_else(|| template.named.get(key2.into().as_ref()).map_or("", Cow::as_ref), Cow::as_ref).trim()
+pub fn get_template_param_2<'a, 'b>(template: &'a Template, key1: impl Into<Cow<'b, str>>, key2: impl Into<Cow<'b, str>>) -> &'a str {
+    //template.named.get(key1.into().as_ref()).map_or_else(|| template.named.get(key2.into().as_ref()).map_or("", Cow::as_ref), Cow::as_ref).trim()
+    template
+        .named
+        .get(key1.into().as_ref())
+        .map_or_else(
+            || template.named.get(key2.into().as_ref()).map_or("", String::as_ref),
+            String::as_ref,
+        )
+        .trim()
 }
 
-pub fn get_template_param<'a, 'b>(template: &'a Template<'_>, key1: impl Into<Cow<'b, str>>) -> &'a str {
-    template.named.get(key1.into().as_ref()).map_or("", Cow::as_ref).trim()
+pub fn get_template_param<'a, 'b>(template: &'a Template, key1: impl Into<Cow<'b, str>>) -> &'a str {
+    template.named.get(key1.into().as_ref()).map_or("", String::as_ref).trim()
 }
 
 pub fn nodes_to_text<'a>(nodes: &[Node<'a>]) -> Result<Cow<'a, str>, String> {
@@ -42,7 +50,7 @@ pub trait ToParams<'a> {
 
 /// Counts how many "date" params are specified for the given prefix in the
 /// given {{article history}} transclusion.
-fn count_existing_entries<'a, T: ToParams<'a>>(history: &Template<'_>) -> usize {
+fn count_existing_entries<'a, T: ToParams<'a>>(history: &Template) -> usize {
     if history.named.contains_key(&format!("{}{}", T::PREFIX, "date")) {
         (2..)
             .into_iter()
@@ -55,7 +63,7 @@ fn count_existing_entries<'a, T: ToParams<'a>>(history: &Template<'_>) -> usize 
     }
 }
 
-pub fn update_article_history<'a, T: ToParams<'a>>(entries: Vec<T>, history: &mut Template<'a>) {
+pub fn update_article_history<'a, T: ToParams<'a>>(entries: Vec<T>, history: &mut Template) {
     let num_existing_entries = count_existing_entries::<T>(history);
 
     fn get_param_prefix<'a, T: ToParams<'a>>(idx: usize) -> String {
@@ -70,7 +78,7 @@ pub fn update_article_history<'a, T: ToParams<'a>>(entries: Vec<T>, history: &mu
         .map(ToParams::to_params)
         .zip(num_existing_entries..) // i.e. if there are 2 existing entries, the first new index will be 3
         .flat_map(|(params, idx): (T::Iter, usize)| {
-            params.map(move |(suffix, value)| (get_param_prefix::<T>(idx) + suffix, value))
+            params.map(move |(suffix, value)| (get_param_prefix::<T>(idx) + suffix, value.into_owned()))
         }),
     );
 }
