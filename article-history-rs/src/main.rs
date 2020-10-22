@@ -1,8 +1,11 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    error::Error,
 };
 
+use itertools::Itertools;
+use mediawiki::{api::Api, page::Page, title::Title};
 use parse_wiki_text::{Configuration, Node, Parameter};
 
 mod common;
@@ -15,15 +18,35 @@ const SUMMARY: &str = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]]
 // as of MW 1.35, the revision table has rev_id as a int(10) unsigned
 type RevId = u32;
 
-pub struct Template<'a> {
-    name: Cow<'a, str>,
-    unnamed: Vec<Cow<'a, str>>,
-    named: HashMap<String, Cow<'a, str>>,
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
+enum TemplateType {
+    ArticleHistory,
+    Dyk,
+    Itn,
+    Otd,
 }
 
-fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str) -> Vec<Template<'a>> {
+#[derive(Debug)]
+pub struct Template<'a> {
+    name: TemplateType,
+    unnamed: Vec<Cow<'a, str>>,
+    named: linked_hash_map::LinkedHashMap<String, Cow<'a, str>>,
+}
+
+fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str, template_name_map: &HashMap<String, TemplateType>) -> Vec<Template<'a>> {
     let output = Configuration::default().parse(wikitext);
-    assert!(output.warnings.is_empty(), "{:?}", output);
+    assert!(
+        output
+            .warnings
+            .iter()
+            .filter(
+                |warning| warning.message != parse_wiki_text::WarningMessage::UnrecognizedTagName
+            )
+            .next()
+            .is_none(),
+        "{:?}",
+        output
+    );
     output
         .nodes
         .into_iter()
@@ -38,6 +61,11 @@ fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str) -> Vec<Temp
                         "while handling '{}': nodes_to_text failed on template name: {}",
                         page_name, e
                     ));
+                let template_type = if let Some(t) = template_name_map.get(template_name.as_ref()) {
+                    *t
+                } else {
+                    return None;
+                };
                 let (named, unnamed): (Vec<_>, Vec<_>) = parameters
                     .iter()
                     .enumerate()
@@ -57,7 +85,7 @@ fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str) -> Vec<Temp
                 let named = named.into_iter().map(|(name, value)| (name.unwrap().into_owned(), value)).collect();
                 let unnamed = unnamed.into_iter().map(|(_name, value)| value).collect();
                 Some(Template {
-                    name: template_name,
+                    name: template_type,
                     unnamed,
                     named,
                 })
@@ -67,6 +95,92 @@ fn wikitext_to_template_list<'a>(wikitext: &'a str, page_name: &str) -> Vec<Temp
         .collect()
 }
 
-fn main() {
-    println!("Hello, world!");
+fn make_map(params: &[(&str, &str)]) -> HashMap<String, String> {
+    params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+async fn build_template_name_map(api: &Api) -> HashMap<String, TemplateType> {
+    let res = api.get_query_api_json_all(&make_map(&[
+        ("action", "query"),
+        ("titles", "Template:Article history|Template:DYK talk|Template:On this day|Template:ITN talk"),
+        ("prop", "redirects"),
+        ("formatversion", "2"),
+    ])).await.expect("build_template_name_map");
+    let mut map = HashMap::new();
+    fn title_to_template_type(s: &str) -> TemplateType {
+        match s {
+            "Template:Article history" => TemplateType::ArticleHistory,
+            "Template:DYK talk" => TemplateType::Dyk,
+            "Template:On this day" => TemplateType::Otd,
+            "Template:ITN talk" => TemplateType::Itn,
+            _ => panic!("main.rs:{} {}", line!(), s),
+        }
+    }
+    fn fix(s: &str) -> String {
+        if s.get(..9) == Some("Template:") {
+            &s[9..]
+        } else {
+            &s[..]
+        }.to_string()
+    }
+    for page in res["query"]["pages"].as_array().unwrap() {
+        let template_type = title_to_template_type(page["title"].as_str().unwrap());
+        map.insert(fix(page["title"].as_str().unwrap()), template_type);
+        for redirect in page["redirects"].as_array().unwrap_or(&vec![]) {
+            map.insert(fix(redirect["title"].as_str().unwrap()), template_type);
+        }
+    }
+    map
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let mut config = config::Config::default();
+    config
+        .merge(config::File::with_name("settings"))?
+        .merge(config::Environment::with_prefix("APP"))?;
+    let username = config.get_str("username")?;
+    let password = config.get_str("password")?;
+
+    let mut api = Api::new("https://en.wikipedia.org/w/api.php").await?;
+    api.login(username, password).await?;
+    api.set_user_agent(format!("EnterpriseyBot/article-history-rs/{} (https://en.wikipedia.org/wiki/User:EnterpriseyBot; apersonwiki@gmail.com)", env!("CARGO_PKG_VERSION")));
+
+    let title = "Talk:FC Bayern Munich";
+    let page = Page::new(Title::new_from_full(title, &api));
+    let text = page.text(&api).await?;
+
+    let text = if let Some(idx) = text.find("\n==") {
+        &text[..idx]
+    } else {
+        &text[..]
+    };
+
+    let template_name_map = build_template_name_map(&api).await;
+    let templates = wikitext_to_template_list(text, title, &template_name_map);
+    let mut templates = templates
+        .into_iter()
+        .map(|template| (template.name, template))
+        .into_group_map();
+
+    // There ought to be only one article history
+    assert!(templates[&TemplateType::ArticleHistory].len() == 1);
+
+    let mut article_history = templates.remove(&TemplateType::ArticleHistory).unwrap().remove(0);
+    for (template_type, templates) in templates.iter() {
+        for template in templates {
+            match template_type {
+                TemplateType::Itn => common::update_article_history(itn::parse_itn_template(template), &mut article_history),
+                TemplateType::Otd => common::update_article_history(otd::parse_otd_template(template), &mut article_history),
+                TemplateType::Dyk => common::update_article_history(vec![dyk::parse_dyk_template(title, template).expect("dyk")], &mut article_history),
+                TemplateType::ArticleHistory => unreachable!(),
+            }
+        }
+    }
+    for (key, value) in article_history.named {
+        value = value.into_owned();
+    }
+    println!("{:#?}", article_history);
+    std::mem::drop(article_history);
+    Ok(())
 }

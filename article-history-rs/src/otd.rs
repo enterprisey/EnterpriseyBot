@@ -6,7 +6,7 @@ use std::{
 use super::Template;
 use crate::common::ToParams;
 
-struct OtdEntry<'a> {
+pub struct OtdEntry<'a> {
     date: Option<Cow<'a, str>>,
     oldid: Option<Cow<'a, str>>,
 }
@@ -26,7 +26,7 @@ impl<'a> ToParams<'a> for OtdEntry<'a> {
     }
 }
 
-fn parse_otd_template<'a>(template: &'a Template) -> Vec<OtdEntry<'a>> {
+pub fn parse_otd_template<'a>(template: &'a Template) -> Vec<OtdEntry<'a>> {
     (1..)
         .into_iter()
         .map(|idx| (idx, format!("oldid{}", idx)))

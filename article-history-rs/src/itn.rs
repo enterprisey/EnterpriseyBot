@@ -47,8 +47,8 @@ impl<'a> ToParams<'a> for ItnEntry {
 /// Logic taken from:
 ///  - Template:ITN talk, revid 898412144 by Jonesey95 on 23 May 2019
 ///  - Template:ITN talk/date, revid 713084449 by MSGJ on 1 April 2016
-pub fn parse_itn_template(template: Template<'_>) -> Vec<ItnEntry> {
-    let global_alt = !get_template_param(&template, "alt").is_empty();
+pub fn parse_itn_template(template: &Template) -> Vec<ItnEntry> {
+    let global_alt = !get_template_param(template, "alt").is_empty();
 
     // First parse item 1
     // I have no clue how this typechecks or borrowchecks

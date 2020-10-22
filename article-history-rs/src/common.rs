@@ -6,6 +6,11 @@ use parse_wiki_text::Node;
 
 use crate::Template;
 
+// Ouch!
+pub fn flatten_cow<'a, T: 'a + ToOwned + ?Sized>(c: &'a Cow<'_, T>) -> Cow<'a, T> {
+    Cow::Borrowed(c.as_ref())
+}
+
 pub fn get_template_param_2<'a, 'b>(template: &'a Template<'_>, key1: impl Into<Cow<'b, str>>, key2: impl Into<Cow<'b, str>>) -> &'a str {
     template.named.get(key1.into().as_ref()).map_or_else(|| template.named.get(key2.into().as_ref()).map_or("", Cow::as_ref), Cow::as_ref).trim()
 }
@@ -56,7 +61,7 @@ pub fn update_article_history<'a, T: ToParams<'a>>(entries: Vec<T>, history: &mu
     fn get_param_prefix<'a, T: ToParams<'a>>(idx: usize) -> String {
         match idx {
             0 => T::PREFIX.into(),
-            _ => format!("{}{}", T::PREFIX, idx),
+            _ => format!("{}{}", T::PREFIX, idx + 1),
         }
     }
 
