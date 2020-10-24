@@ -1,14 +1,14 @@
 use std::{
     borrow::Cow,
+    collections::HashMap,
 };
 
 use parse_wiki_text::Node;
 
 use crate::Template;
 
-// Ouch!
-pub fn flatten_cow<'a, T: 'a + ToOwned + ?Sized>(c: &'a Cow<'_, T>) -> Cow<'a, T> {
-    Cow::Borrowed(c.as_ref())
+pub fn make_map(params: &[(&str, &str)]) -> HashMap<String, String> {
+    params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
 pub fn get_template_param_2<'a, 'b>(template: &'a Template, key1: impl Into<Cow<'b, str>>, key2: impl Into<Cow<'b, str>>) -> &'a str {

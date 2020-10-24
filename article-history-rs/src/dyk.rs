@@ -4,9 +4,7 @@ use std::{
 };
 
 use super::Template;
-use crate::common::ToParams;
-
-use ureq;
+use crate::common::{make_map, ToParams};
 
 pub struct DykEntry<'a> {
     date: Cow<'a, str>,
@@ -32,16 +30,14 @@ impl<'a> ToParams<'a> for DykEntry<'a> {
     }
 }
 
-fn try_get_nompage(article_title: &str) -> Option<String> {
+async fn try_get_nompage(api: &mediawiki::api::Api, article_title: &str) -> Option<String> {
     let content_nom_page = "Template:Did you know nominations/".to_string() + article_title;
     let talk_nom_page = "Template talk:Did you know/".to_string() + article_title;
-    let res = ureq::get(&format!(
-            "https://en.wikipedia.org/w/api.php?action=query&titles={}|{}&format=json&formatversion=2",
-            content_nom_page, talk_nom_page
-        ))
-        .call()
-        .into_json()
-        .unwrap();
+    let res = api.get_query_api_json(&make_map(&[
+        ("action", "query"),
+        ("titles", &format!("{}|{}", content_nom_page, talk_nom_page)),
+        ("formatversion", "2"),
+    ])).await.unwrap();
     let mut does_content_nom_page_exist = true;
     let mut does_talk_nom_page_exist = true;
     for page in res["query"]["pages"].as_array().unwrap() {
@@ -65,7 +61,11 @@ fn try_get_nompage(article_title: &str) -> Option<String> {
     }
 }
 
-pub fn parse_dyk_template<'a>(article_title: &str, template: &'a Template) -> Result<DykEntry<'a>, String> {
+pub async fn parse_dyk_template<'a>(
+    api: &mediawiki::api::Api,
+    article_title: &str,
+    template: &'a Template,
+) -> Result<DykEntry<'a>, String> {
     let param_2_is_numeric = template.unnamed.get(1).map_or(false, |param_2| param_2.chars().all(char::is_numeric));
     let date: Cow<'_, str> = if param_2_is_numeric {
         Cow::Owned(format!("{} {}", template.unnamed[0], template.unnamed[1]))
@@ -80,9 +80,9 @@ pub fn parse_dyk_template<'a>(article_title: &str, template: &'a Template) -> Re
         })
         .map(String::as_ref)
         .map(Cow::Borrowed);
-    let nompage: Option<Cow<'_, _>> = template.named.get("nompage")
-        .map(String::as_ref)
-        .map(Cow::Borrowed)
-        .or_else(|| try_get_nompage(article_title).map(Cow::Owned));
+    let nompage: Option<Cow<'_, _>> = match template.named.get("nompage") {
+        Some(page) => Some(Cow::Borrowed(page.as_ref())),
+        None => try_get_nompage(api, article_title).await.map(Cow::Owned)
+    };
     Ok(DykEntry { date, hook, nompage })
 }
