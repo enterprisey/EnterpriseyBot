@@ -5,8 +5,10 @@ use std::{
 
 use chrono::NaiveDateTime;
 
-use super::{RevId, Template};
-use crate::common::{ToParams, get_template_param, get_template_param_2};
+use super::{RevId, OtherTemplate};
+use crate::common::{ToParams, get_template_param, get_template_param_2, fuzzy_parse_timestamp};
+
+const MAX_ENTRY_NUMBER: usize = 6; // i.e. a date6 parameter may be specified, but not a date7 one
 
 pub enum ItnLink {
     /// Portal:Current events/{{#time:Y F d}}
@@ -47,7 +49,7 @@ impl<'a> ToParams<'a> for ItnEntry {
 /// Logic taken from:
 ///  - Template:ITN talk, revid 898412144 by Jonesey95 on 23 May 2019
 ///  - Template:ITN talk/date, revid 713084449 by MSGJ on 1 April 2016
-pub fn parse_itn_template(template: &Template) -> Vec<ItnEntry> {
+pub fn parse_itn_template(template: &OtherTemplate) -> Result<Vec<ItnEntry>, dtparse::ParseError> {
     let global_alt = !get_template_param(template, "alt").is_empty();
 
     // First parse item 1
@@ -58,38 +60,38 @@ pub fn parse_itn_template(template: &Template) -> Vec<ItnEntry> {
                 template.unnamed.get(0).map_or("", |x| &*x),
                 template.unnamed.get(1).map_or("", |x| &*x))), |x| Cow::Borrowed(x.as_ref())), |x| Cow::Borrowed(x.as_ref()));
     let date1 = date1_owned.as_ref().trim();
-    let entry1: Option<ItnEntry> = if date1.is_empty() {
+    let entry1: Option<_> = if date1.is_empty() {
         None
     } else {
         let oldid1 = get_template_param_2(&template, "oldid1", "oldid");
         let alt1 = global_alt || !get_template_param(&template, "alt1").is_empty();
-        Some(ItnEntry {
-            date: dtparse::parse(date1).unwrap().0,
+        Some(Ok(ItnEntry {
+            date: fuzzy_parse_timestamp(date1)?,
             link: match (alt1, oldid1.parse()) {
                 (true, _) => ItnLink::PortalSubpage,
                 (false, Ok(i)) => ItnLink::ItnOldid(i),
                 (false, Err(_)) => ItnLink::NoLink,
             },
-        })
+        }))
     };
 
     // Then parse the rest of the items
     if template.named.contains_key("date2") {
-        (2..=6).into_iter().filter_map(|idx| {
+        (2..=MAX_ENTRY_NUMBER).into_iter().filter_map(|idx| {
             let date_n = get_template_param(&template, format!("date{}", idx));
             if date_n.is_empty() {
                 None
             } else {
                 let oldid_n = get_template_param(&template, format!("oldid{}", idx));
                 let alt_n = global_alt || !get_template_param(&template, format!("alt{}", idx)).is_empty();
-                Some(ItnEntry {
-                    date: dtparse::parse(date_n).unwrap().0,
+                Some(fuzzy_parse_timestamp(date_n).map(|date| ItnEntry {
+                    date,
                     link: match (alt_n, oldid_n.parse()) {
                         (true, _) => ItnLink::PortalSubpage,
                         (false, Ok(i)) => ItnLink::ItnOldid(i),
                         (false, Err(_)) => ItnLink::NoLink,
                     },
-                })
+                }))
             }
         }).chain(entry1.into_iter()).collect()
     } else {

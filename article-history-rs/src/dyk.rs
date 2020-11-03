@@ -3,8 +3,8 @@ use std::{
     iter,
 };
 
-use super::Template;
-use crate::common::{make_map, ToParams};
+use super::OtherTemplate;
+use crate::common::{ToParams, try_page_existence, PageExistenceResult};
 
 pub struct DykEntry<'a> {
     date: Cow<'a, str>,
@@ -30,41 +30,10 @@ impl<'a> ToParams<'a> for DykEntry<'a> {
     }
 }
 
-async fn try_get_nompage(api: &mediawiki::api::Api, article_title: &str) -> Option<String> {
-    let content_nom_page = "Template:Did you know nominations/".to_string() + article_title;
-    let talk_nom_page = "Template talk:Did you know/".to_string() + article_title;
-    let res = api.get_query_api_json(&make_map(&[
-        ("action", "query"),
-        ("titles", &format!("{}|{}", content_nom_page, talk_nom_page)),
-        ("formatversion", "2"),
-    ])).await.unwrap();
-    let mut does_content_nom_page_exist = true;
-    let mut does_talk_nom_page_exist = true;
-    for page in res["query"]["pages"].as_array().unwrap() {
-        let page_title = page["title"].as_str().unwrap();
-        let is_page_missing = page["missing"].as_bool().unwrap_or(false);
-        if page_title == content_nom_page && is_page_missing {
-            does_content_nom_page_exist = false;
-        } else if page_title == content_nom_page && is_page_missing {
-            does_talk_nom_page_exist = false;
-        } else {
-            panic!("unrecognized title {}: full response {:?}", page_title, res);
-        }
-    }
-
-    if does_content_nom_page_exist {
-        Some(content_nom_page)
-    } else if does_talk_nom_page_exist {
-        Some(talk_nom_page)
-    } else {
-        None
-    }
-}
-
 pub async fn parse_dyk_template<'a>(
     api: &mediawiki::api::Api,
     article_title: &str,
-    template: &'a Template,
+    template: &'a OtherTemplate,
 ) -> Result<DykEntry<'a>, String> {
     let param_2_is_numeric = template.unnamed.get(1).map_or(false, |param_2| param_2.chars().all(char::is_numeric));
     let date: Cow<'_, str> = if param_2_is_numeric {
@@ -82,7 +51,15 @@ pub async fn parse_dyk_template<'a>(
         .map(Cow::Borrowed);
     let nompage: Option<Cow<'_, _>> = match template.named.get("nompage") {
         Some(page) => Some(Cow::Borrowed(page.as_ref())),
-        None => try_get_nompage(api, article_title).await.map(Cow::Owned)
+        None => {
+            let content_nom_page = "Template:Did you know nominations/".to_string() + article_title;
+            let talk_nom_page = "Template talk:Did you know/".to_string() + article_title;
+            match try_page_existence(api, &content_nom_page, &talk_nom_page).await? {
+                PageExistenceResult::PrimaryExists => Some(Cow::Owned(content_nom_page)),
+                PageExistenceResult::BackupExists => Some(Cow::Owned(talk_nom_page)),
+                PageExistenceResult::NeitherExist => None,
+            }
+        },
     };
     Ok(DykEntry { date, hook, nompage })
 }

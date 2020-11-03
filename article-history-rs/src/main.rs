@@ -2,81 +2,155 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     error::Error,
-    iter,
     fs::{File, OpenOptions},
     io::{Read, Write},
+    iter,
     path,
 };
 
+use chrono::NaiveDateTime;
 use futures::stream::{Stream, StreamExt};
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use mediawiki::{api::Api, page::Page, title::Title};
 use parse_wiki_text::{Configuration, Node, Parameter};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 mod common;
 mod dyk;
 mod itn;
 mod otd;
+mod xfd;
 
-use common::make_map;
+use common::{make_map, WikitextTransform};
 
 const SUMMARY: &str = "[[Wikipedia:Bots/Requests for approval/APersonBot 7|Bot]] merging redundant talk page banners into [[Template:Article history]].";
 
 // as of MW 1.35, the revision table has rev_id as a int(10) unsigned
 type RevId = u32;
 
-#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
+pub type Parameters = linked_hash_map::LinkedHashMap<String, String>;
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash,EnumIter)]
 enum TemplateType {
-    ArticleHistory,
     Dyk,
     Itn,
     Otd,
+    Xfd,
 }
 
-pub struct Template {
-    name: TemplateType,
-    unnamed: Vec<String>,
-    named: linked_hash_map::LinkedHashMap<String, String>,
-}
-
-impl Template {
-    fn into_wikitext(self) -> String {
-        let are_any_named = !self.named.is_empty();
-    "{{".to_string()
-        + match self.name {
-            TemplateType::ArticleHistory => "Article history",
-            TemplateType::Dyk => "DYK talk",
-            TemplateType::Itn => "ITN talk",
-            TemplateType::Otd => "On this day",
+impl TemplateType {
+    fn get_template_title(&self) -> &'static str {
+        use TemplateType::*;
+        match self {
+            Dyk => "Template:DYK talk",
+            Itn => "Template:ITN talk",
+            Otd => "Template:On this day",
+            Xfd => "Template:Old XfD multi",
         }
-        + if !self.unnamed.is_empty() { "|" } else { "" }
-        + &self.unnamed.join("|")
-        + if are_any_named { "\n|" } else { "" }
-        + &self.named
-            .iter()
-            .map(Some)
-            .chain(iter::once(None))
-            .tuple_windows()
-            .map(|i| match i { (Some((k, v)), next_kv) => {
-                const N: usize = "action".len();
-                let need_newline = k.get(..N) == Some("action")
-                    && next_kv.map_or(false, |(next_k, _next_v)| {
-                        k.get(..N + 1) != next_k.get(..N + 1)
-                    });
-                format!(" {} = {}{}", k, v, if need_newline { "\n" } else { "" })
-            }, _ => unreachable!()})
-            .collect::<Vec<_>>()
-            .join("\n|")
-        + if are_any_named { "\n" } else { "" }
-        + "}}"
+    }
+}
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
+pub struct ArticleHistoryTemplateType;
+
+type TemplateNameMap = HashMap<String, Either<ArticleHistoryTemplateType, TemplateType>>;
+
+#[derive(Debug)]
+pub struct OtherTemplate {
+    kind: TemplateType,
+    unnamed: Vec<String>,
+    named: Parameters,
+}
+
+pub struct Action {
+    code: String,
+    date: String,
+    parsed_date: NaiveDateTime,
+    link: Option<String>,
+    result: Option<String>,
+    oldid: Option<String>, // TODO figure these out from the timestamp, shouldn't be hard
+}
+
+pub struct ArticleHistory {
+    actions: Vec<Action>,
+    other: Parameters,
+}
+
+pub struct Spanned<T> {
+    start: usize,
+    end: usize,
+    item: T,
+}
+
+impl ArticleHistory {
+    fn from_params(mut params: Parameters) -> Result<Self, String> {
+        let highest_code_number = (1..).find(|num| !params.contains_key(&format!("action{}", num))).unwrap_or(0);
+        let highest_date_number = (1..).find(|num| !params.contains_key(&format!("action{}date", num))).unwrap_or(0);
+
+        if highest_code_number != highest_date_number {
+            return Err(format!(
+                "highest_code_number ({}) did not equal highest_date_number ({}): full params {:?}",
+                highest_code_number, highest_date_number, params
+            ));
+        }
+
+        let actions = (1..highest_date_number).map(|num| {
+            let prefix = format!("action{}", num);
+            let date_key = prefix.clone() + "date";
+            let parsed_date = common::fuzzy_parse_timestamp(&params[&date_key]).expect("dtparse");
+            Action {
+                code: params.remove(&prefix).unwrap(),
+                date: params.remove(&date_key).unwrap(),
+                parsed_date,
+                link: params.remove(&(prefix.clone() + "link")),
+                oldid: params.remove(&(prefix.clone() + "oldid")),
+                result: params.remove(&(prefix + "result")),
+            }
+        }).collect();
+
+        Ok(ArticleHistory {
+            actions,
+            other: params,
+        })
+    }
+
+    fn into_wikitext(self) -> String {
+        let any_actions = !self.actions.is_empty();
+        "{{Article history\n".to_string()
+            + &self.actions.into_iter().enumerate()
+                .map(
+                    |(idx, Action { code, date, parsed_date: _, link, result, oldid })| {
+                        format!(
+                            "| action{0} = {1}\n| action{0}date = {2}{3}{4}{5}",
+                            idx + 1,
+                            code,
+                            date,
+                            link.map_or("".into(), |l| format!("\n| action{}link = {}", idx + 1, l)),
+                            result.map_or("".into(), |l| format!("\n| action{}result = {}", idx + 1, l)),
+                            oldid.map_or("".into(), |l| format!("\n| action{}oldid = {}", idx + 1, l))
+                        )
+                    },
+                )
+                .collect::<Vec<_>>()
+                .join("\n\n")
+            + if any_actions { "\n\n|" } else { "" }
+            + &self
+                .other
+                .iter()
+                .map(|(k, v)| format!(" {} = {}", k, v))
+                .collect::<Vec<_>>()
+                .join("\n|")
+            + if any_actions { "\n" } else { "" }
+            + "}}"
     }
 }
 
 fn wikitext_to_template_list<'a>(
     wikitext: &'a str,
     page_name: &str,
-    template_name_map: &HashMap<String, TemplateType>,
-) -> Vec<(Template, (usize, usize))> {
+    template_name_map: &TemplateNameMap,
+) -> (Vec<Spanned<ArticleHistory>>, Vec<Spanned<OtherTemplate>>) {
     let output = Configuration::default().parse(wikitext);
     assert!(
         output
@@ -100,12 +174,12 @@ fn wikitext_to_template_list<'a>(
                 start,
                 end,
             } => {
-                let template_name = common::nodes_to_text(&name_nodes).unwrap_or_else(|e|
+                let template_name = common::nodes_to_text(&name_nodes, WikitextTransform::RequirePureText).unwrap_or_else(|e|
                     panic!(
                         "while handling '{}': nodes_to_text failed on template name: {}",
                         page_name, e
                     ));
-                let template_type = if let Some(t) = template_name_map.get(template_name.as_ref()) {
+                let template_type = if let Some(t) = template_name_map.get(common::uppercase_first_letter(template_name.as_ref()).as_ref()) {
                     *t
                 } else {
                     return None;
@@ -114,12 +188,12 @@ fn wikitext_to_template_list<'a>(
                     .iter()
                     .enumerate()
                     .map(|(param_idx, Parameter { name: name_nodes, value: value_nodes, .. })| {
-                        let param_name = name_nodes.as_ref().map(|name_nodes| common::nodes_to_text(&name_nodes)
+                        let param_name = name_nodes.as_ref().map(|name_nodes| common::nodes_to_text(&name_nodes, WikitextTransform::RequirePureText)
                             .unwrap_or_else(|e| panic!(
                                 "while handling page '{}', template '{}': nodes_to_text failed on the name of parameter index {}: {}",
                                 page_name, template_name, param_idx, e
                             )));
-                        let param_value = common::nodes_to_text(&value_nodes)
+                        let param_value = common::nodes_to_text(&value_nodes, WikitextTransform::KeepMarkup)
                             .unwrap_or_else(|e| panic!(
                                 "while handling page '{}', template '{}': nodes_to_text failed on the value for parameter '{:?}' (index {}): {}",
                                 page_name, template_name, param_name, param_idx, e
@@ -127,35 +201,47 @@ fn wikitext_to_template_list<'a>(
                         (param_name, param_value)
                     }).partition(|(name, _value)| name.is_some());
                 let named = named.into_iter().map(|(name, value)| (name.unwrap().into_owned(), value.into_owned())).collect();
-                let unnamed = unnamed.into_iter().map(|(_name, value)| value.into_owned()).collect();
-                Some((Template {
-                    name: template_type,
-                    unnamed,
-                    named,
-                }, (start, end)))
+                let unnamed = unnamed.into_iter().map(|(_name, value)| value.into_owned()).collect::<Vec<_>>();
+                let template = match template_type {
+                    Either::Left(ArticleHistoryTemplateType) => {
+                        assert!(unnamed.is_empty());
+                        Either::Left(Spanned { start, end, item: ArticleHistory::from_params(named).unwrap() })
+                    },
+                    Either::Right(other_type) => Either::Right(Spanned { start, end, item: OtherTemplate {
+                        kind: other_type,
+                        unnamed,
+                        named,
+                    } }),
+                };
+                Some(template)
             },
             _ => None,
         })
-        .collect()
+        .partition_map(std::convert::identity)
 }
 
-async fn build_template_name_map(api: &Api) -> HashMap<String, TemplateType> {
+async fn build_template_name_map(api: &Api) -> TemplateNameMap {
+    let all_template_titles = TemplateType::iter().map(|t| t.get_template_title()).collect::<Vec<_>>().join("|");
     let res = api.get_query_api_json_all(&make_map(&[
         ("action", "query"),
-        ("titles", "Template:Article history|Template:DYK talk|Template:On this day|Template:ITN talk"),
+        ("titles", &all_template_titles),
         ("prop", "redirects"),
         ("formatversion", "2"),
     ])).await.expect("build_template_name_map");
     let mut map = HashMap::new();
-    fn title_to_template_type(s: &str) -> TemplateType {
+    let title_to_template_type_map: HashMap<&'static str, TemplateType> = TemplateType::iter()
+        .map(|t| (t.get_template_title(), t))
+        .collect();
+    let title_to_template_type = |s| -> Either<ArticleHistoryTemplateType, TemplateType> {
         match s {
-            "Template:Article history" => TemplateType::ArticleHistory,
-            "Template:DYK talk" => TemplateType::Dyk,
-            "Template:On this day" => TemplateType::Otd,
-            "Template:ITN talk" => TemplateType::Itn,
-            _ => panic!("main.rs:{} {}", line!(), s),
+            "Template:Article history" => Either::Left(ArticleHistoryTemplateType),
+            _ => if let Some(kind) = title_to_template_type_map.get(s) {
+                    Either::Right(*kind)
+                } else {
+                    panic!("main.rs:{} {}", line!(), s)
+                },
         }
-    }
+    };
     fn fix(s: &str) -> String {
         if s.get(..9) == Some("Template:") {
             &s[9..]
@@ -173,36 +259,51 @@ async fn build_template_name_map(api: &Api) -> HashMap<String, TemplateType> {
     map
 }
 
-async fn process_page(api: &Api, title: &str) -> Result<String, Box<dyn Error>> {
+async fn process_page(api: &Api, title: &str, template_name_map: &TemplateNameMap) -> Result<String, Box<dyn Error>> {
+    dbg!(title);
     let page = Page::new(Title::new_from_full(title, &api));
     let text = page.text(&api).await?;
 
     let (zeroth_section, rest_of_page) = text.split_at(text.find("\n==").unwrap_or(text.len()));
     let mut zeroth_section = zeroth_section.to_string();
 
-    let template_name_map = build_template_name_map(&api).await;
-    let templates = wikitext_to_template_list(&zeroth_section, title, &template_name_map);
+    let (mut all_article_history_templates, other_templates) =
+        wikitext_to_template_list(&zeroth_section, title, template_name_map);
 
-    let (mut all_article_history_templates, other_templates): (Vec<_>, Vec<_>) = templates
-        .into_iter()
-        .partition(|t| t.0.name == TemplateType::ArticleHistory);
+    if all_article_history_templates.is_empty() {
+        let location_for_article_history = zeroth_section.len();
+        all_article_history_templates.push(Spanned {
+            item: ArticleHistory {
+                actions: Vec::new(),
+                other: linked_hash_map::LinkedHashMap::new(),
+            },
+            start: location_for_article_history,
+            end: location_for_article_history,
+        });
+    }
 
     // There ought to be only one article history
     assert_eq!(all_article_history_templates.len(), 1, "{}", title);
 
-    let (mut article_history, (article_history_start, article_history_end)) = all_article_history_templates.remove(0);
+    let Spanned { item: article_history, start: article_history_start, end: article_history_end } = all_article_history_templates.remove(0);
+    let mut article_history: ArticleHistory = article_history.try_into().unwrap();
     let mut spans_before_article_history_to_remove = Vec::new();
-    for &(ref template, (template_start, mut template_end)) in other_templates.iter().rev() {
-        match template.name {
+    for &Spanned { item: ref template, start: template_start, end: mut template_end } in other_templates.iter().rev() {
+        match template.kind {
             TemplateType::Itn => common::update_article_history(
-                itn::parse_itn_template(template), &mut article_history),
+                itn::parse_itn_template(template).unwrap_or_else(|e| panic!("itn at {}: {}", title, e)), &mut article_history.other),
             TemplateType::Otd => common::update_article_history(
-                otd::parse_otd_template(template), &mut article_history),
+                otd::parse_otd_template(template), &mut article_history.other),
             TemplateType::Dyk => common::update_article_history(
-                vec![dyk::parse_dyk_template(api, title, template).await.expect("dyk")],
-                &mut article_history
+                vec![dyk::parse_dyk_template(api, title, template).await.unwrap_or_else(|e| panic!("dyk at {}: {}", title, e))],
+                &mut article_history.other
             ),
-            TemplateType::ArticleHistory => unreachable!(),
+            TemplateType::Xfd => {
+                let new_actions = xfd::params_to_xfd(title, &template.named).unwrap_or_else(|e| panic!("xfd at {}: {}", title, e))
+                    .into_iter().map(|x| xfd::xfd_to_action(x).unwrap_or_else(|e| panic!("xfd conversion at {}: {}", title, e)));
+                article_history.actions.extend(new_actions);
+                article_history.actions.sort_by_key(|action| action.parsed_date);
+            }
         }
 
         if zeroth_section.as_bytes()[template_end] == b'\n' {
@@ -215,8 +316,14 @@ async fn process_page(api: &Api, title: &str) -> Result<String, Box<dyn Error>> 
             spans_before_article_history_to_remove.push((template_start, template_end));
         }
     }
+
     zeroth_section.replace_range(article_history_start..article_history_end,
             &article_history.into_wikitext());
+
+    for (start, end) in spans_before_article_history_to_remove {
+        zeroth_section.replace_range(start..end, "");
+    }
+
     let new_text = zeroth_section + rest_of_page;
     Ok(new_text)
 }
@@ -234,7 +341,13 @@ async fn get_pages_to_fix<'a>(api: &'a Api, starting_title: Option<String>) -> i
         ("gapnamespace", "1"), // talk pages
         ("gaplimit", "50"),
         ("prop", "templates"),
-        ("tltemplates", "Template:Article history|Template:ITN talk|Template:On this day|Template:DYK talk"),
+        ("tltemplates",
+            &TemplateType::iter()
+                .map(|t| t.get_template_title())
+                .chain(iter::once("Template:Article history"))
+                .collect::<Vec<_>>()
+                .join("|")
+        ),
         ("formatversion", "2"),
     ]);
     if let Some(starting_title) = starting_title {
@@ -252,6 +365,8 @@ async fn get_pages_to_fix<'a>(api: &'a Api, starting_title: Option<String>) -> i
             panic!("bad response to {:?}: res {:?}", params.clone(), data)
         })
         .filter_map(|page| {
+            // TODO three or more regular templates should trigger an edit even if there's no
+            // article history
             let mut has_article_history = false;
             let mut has_other_template = false;
             for template in page["templates"].as_array().into_iter().flatten() {
@@ -311,10 +426,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     api.login(username, password).await?;
     api.set_user_agent(format!("EnterpriseyBot/article-history-rs/{} (https://en.wikipedia.org/wiki/User:EnterpriseyBot; apersonwiki@gmail.com)", env!("CARGO_PKG_VERSION")));
 
+    let template_name_map = build_template_name_map(&api).await;
+
     let mut edit_list: Vec<(String, String)> = Vec::new(); // (title, new text)
     let mut titles = Box::pin(get_pages_to_fix(&api, load_progress(&progress_filename)?).await);
     while let Some(page_title) = titles.next().await {
-        let new_text = process_page(&api, &page_title).await.unwrap();
+        let new_text = process_page(&api, &page_title, &template_name_map).await.unwrap();
         edit_list.push((page_title.clone(), new_text));
         if edit_list.len() >= edits_per_session {
             break;

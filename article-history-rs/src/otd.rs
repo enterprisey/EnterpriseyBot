@@ -3,7 +3,7 @@ use std::{
     iter,
 };
 
-use super::Template;
+use super::OtherTemplate;
 use crate::common::ToParams;
 
 pub struct OtdEntry<'a> {
@@ -26,7 +26,7 @@ impl<'a> ToParams<'a> for OtdEntry<'a> {
     }
 }
 
-pub fn parse_otd_template<'a>(template: &'a Template) -> Vec<OtdEntry<'a>> {
+pub fn parse_otd_template<'a>(template: &'a OtherTemplate) -> Vec<OtdEntry<'a>> {
     (1..)
         .into_iter()
         .map(|idx| (idx, format!("oldid{}", idx)))
