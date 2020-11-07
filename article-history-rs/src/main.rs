@@ -259,10 +259,8 @@ async fn build_template_name_map(api: &Api) -> TemplateNameMap {
     map
 }
 
-async fn process_page(api: &Api, title: &str, template_name_map: &TemplateNameMap) -> Result<String, Box<dyn Error>> {
+async fn process_page(api: &Api, title: &str, text: &str, template_name_map: &TemplateNameMap) -> Result<String, Box<dyn Error>> {
     dbg!(title);
-    let page = Page::new(Title::new_from_full(title, &api));
-    let text = page.text(&api).await?;
 
     let (zeroth_section, rest_of_page) = text.split_at(text.find("\n==").unwrap_or(text.len()));
     let mut zeroth_section = zeroth_section.to_string();
@@ -416,14 +414,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     config
         .merge(config::File::with_name("settings"))?
         .merge(config::Environment::with_prefix("APP"))?;
-    let username = config.get_str("username")?;
-    let password = config.get_str("password")?;
 
     let edits_per_session: usize = config.get_int("edits_per_session")?.try_into()?;
     let progress_filename = config.get_str("progress_file")?;
 
-    let mut api = Api::new("https://en.wikipedia.org/w/api.php").await?;
-    api.login(username, password).await?;
+    #[cfg(test)]
+    let mut api = Api::new(&mockito::server_url()).await?;
+
+    #[cfg(not(test))]
+    let mut api = {
+        let mut api = Api::new("https://en.wikipedia.org/w/api.php").await?;
+        let username = config.get_str("username")?;
+        let password = config.get_str("password")?;
+        api.login(username, password).await?;
+        api
+    };
+
     api.set_user_agent(format!("EnterpriseyBot/article-history-rs/{} (https://en.wikipedia.org/wiki/User:EnterpriseyBot; apersonwiki@gmail.com)", env!("CARGO_PKG_VERSION")));
 
     let template_name_map = build_template_name_map(&api).await;
@@ -431,7 +437,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut edit_list: Vec<(String, String)> = Vec::new(); // (title, new text)
     let mut titles = Box::pin(get_pages_to_fix(&api, load_progress(&progress_filename)?).await);
     while let Some(page_title) = titles.next().await {
-        let new_text = process_page(&api, &page_title, &template_name_map).await.unwrap();
+        let page = Page::new(Title::new_from_full(&page_title, &api));
+        let text = page.text(&api).await?;
+        let new_text = process_page(&api, &page_title, &text, &template_name_map).await.unwrap();
         edit_list.push((page_title.clone(), new_text));
         if edit_list.len() >= edits_per_session {
             break;

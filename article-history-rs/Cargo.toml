@@ -1,5 +1,5 @@
 [package]
-name = "article-history-rs"
+name = "article_history_rs"
 version = "0.1.0"
 authors = ["Enterprisey <apersonwiki@gmail.com>"]
 edition = "2018"
@@ -21,3 +21,6 @@ lazy_static = "1.4.0"
 percent-encoding = "2.1.0"
 strum = "0.19.5"
 strum_macros = "0.19.4"
+
+[dev-dependencies]
+mockito = "0.27.0"
