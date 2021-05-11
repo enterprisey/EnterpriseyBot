@@ -34,13 +34,13 @@ def make_table_row(r):
     # Utility function for processing
     def take_inner(regex, text):
         """
-	Given a regex with exactly one capturing group and some text,
-	return the text after all occurrences of the regex have been
-	replaced with the group.
+        Given a regex with exactly one capturing group and some text,
+        return the text after all occurrences of the regex have been
+        replaced with the group.
 
-	Example: take_inner("a(.)a", "aba") == "b"
-	"""
-	return re.sub(regex, r"\1", text)
+        Example: take_inner("a(.)a", "aba") == "b"
+        """
+        return re.sub(regex, r"\1", text)
 
     # Row number
     row_number = r.row_number
@@ -65,7 +65,7 @@ def make_table_row(r):
     if type(r.last_botop_time) is datetime.datetime:
         r.last_botop_time = r.last_botop_time.strftime(TIME_FORMAT_STRING)
 
-    elements = map(unicode, [row_number, target, title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
+    elements = map(str, [row_number, target, title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
     return u"|-\n| {} || [[WP:Bot requests#{}|{}]] || {} || {} || {} || {} || {}".format(*elements)
 
 botop_cache = {}
@@ -88,8 +88,8 @@ def main():
     section_headers = list(SECTION_HEADER.finditer(page_content))
 
     # If it's not a level-2 header, the char before a match will be "="
-    section_headers = filter(lambda h:page_content[h.start(0) - 1] != "=",
-                             section_headers)
+    section_headers = list(filter(lambda h:page_content[h.start(0) - 1] != "=",
+                             section_headers))
 
     # Now, build our list of sections
     sections = []
@@ -118,13 +118,14 @@ def main():
         r = Request()
         r.row_number = enum_number + 1
         r.title = section_header
-        r.replies = unicode(section).count(u"(UTC)") - 1
+        r.replies = section.count(u"(UTC)") - 1
         signatures = []
         for index, each_node in enumerate(section.nodes):
             if type(each_node) == mwparserfromhell.nodes.text.Text and "(UTC)" in each_node:
 
                 # Get the last timestamp-looking thing (trick from http://stackoverflow.com/a/2988680/1757964)
-                for timestamp_match in TIMESTAMP.finditer(unicode(each_node)): pass
+                each_node = str(each_node)
+                for timestamp_match in TIMESTAMP.finditer(each_node): pass
                 try:
                     timestamp = datetime.datetime.strptime(timestamp_match.group(0), SIGNATURE_TIME_FORMAT)
                 except ValueError:
@@ -132,7 +133,7 @@ def main():
 
                 # Use the last user talk page link before the timestamp
                 for user_index in itertools.count(index - 1, -1):
-                    user = USER.search(unicode(section.get(user_index)))
+                    user = USER.search(str(section.get(user_index)))
                     if user:
                         user = user.group(1)
                         break
@@ -161,7 +162,7 @@ def main():
         return r
 
     # Why enumerate? Because we need row numbers in the table
-    requests = map(section_to_request, enumerate(sections))
+    requests = list(map(section_to_request, enumerate(sections)))
 
     print_log("Parsed BOTREQ and made a list of {} requests.".format(len(requests)))
     table_rows = map(make_table_row, requests)
