@@ -1,0 +1,5 @@
+username = "BOT USERNAME"
+password = "BOT PASSWORD"
+progress_file = "progress.txt"
+banned_templates = [ "WikiProject banner shell", "WikiProject Anime and manga" ]
+edits_per_session = 2

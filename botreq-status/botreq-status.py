@@ -17,7 +17,7 @@ SUMMARY = "Bot updating BOTREQ status table ({} requests)"
 USER = re.compile(r"\[\[User.*?:(.*?)(?:\||(?:\]\]))")
 TIMESTAMP = re.compile(r"\d{2}:\d{2}, \d{1,2} [A-Za-z]* \d{4}")
 SIGNATURE = re.compile(r"\[\[User.*?\]\].*?\(UTC\)")
-SECTION_HEADER = re.compile(r"^== ?([^=]+) ?==", re.MULTILINE)
+SECTION_HEADER = re.compile(r"^==\s*(.+?)\s*==$", flags=re.M)
 
 SIGNATURE_TIME_FORMAT = "%H:%M, %d %B %Y"
 TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
@@ -74,7 +74,7 @@ def is_botop(wiki, username):
         return botop_cache[username]
 
     userpage = pywikibot.Page(wiki, "User:" + username)
-    result = any(x.title(withNamespace=False) == BOTOP_CAT for x in userpage.categories())
+    result = any(x.title(with_ns=False) == BOTOP_CAT for x in userpage.categories())
     botop_cache[username] = result
     return result
 
@@ -164,14 +164,15 @@ def main():
     # Why enumerate? Because we need row numbers in the table
     requests = list(map(section_to_request, enumerate(sections)))
 
-    print_log("Parsed BOTREQ and made a list of {} requests.".format(len(requests)))
+    num_requests = len(list(requests))
+    print_log("Parsed BOTREQ and made a list of {} requests.".format(num_requests))
     table_rows = map(make_table_row, requests)
     table = "\n".join(table_rows) + "\n|}"
     wikitext = TABLE_HEADER + table
 
     report_page = pywikibot.Page(wiki, REPORT_PAGE)
     report_page.text = wikitext
-    report_page.save(summary=SUMMARY.format(len(requests)))
+    report_page.save(summary=SUMMARY.format(num_requests))
     print_log("Saved {}.".format(REPORT_PAGE))
 
 if __name__ == "__main__":

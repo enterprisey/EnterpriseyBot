@@ -1,0 +1,4 @@
+username = "BOT USERNAME"
+password = "BOT PASSWORD"
+progress_file = "progress.txt"
+edits_per_session = 2
