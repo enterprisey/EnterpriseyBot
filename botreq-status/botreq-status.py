@@ -17,7 +17,7 @@ SUMMARY = "Bot updating BOTREQ status table ({} requests)"
 USER = re.compile(r"\[\[User.*?:(.*?)(?:\||(?:\]\]))")
 TIMESTAMP = re.compile(r"\d{2}:\d{2}, \d{1,2} [A-Za-z]* \d{4}")
 SIGNATURE = re.compile(r"\[\[User.*?\]\].*?\(UTC\)")
-SECTION_HEADER = re.compile(r"== ?([^=]+) ?==")
+SECTION_HEADER = re.compile(r"^== ?([^=]+) ?==", re.MULTILINE)
 
 SIGNATURE_TIME_FORMAT = "%H:%M, %d %B %Y"
 TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
