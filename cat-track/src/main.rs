@@ -15,10 +15,23 @@ fn make_map(params: &[(&str, &str)]) -> HashMap<String, String> {
     params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
+fn make_nonnegative(i: i64) -> u64 {
+    if i < 0 {
+        0
+    } else {
+        i as u64
+    }
+}
+
 /// recursively get total category size given title and categoryinfo
 fn size(api: &ApiSync, category_title: &str, categoryinfo: &serde_json::Value, never_recurse: bool) -> Result<u64, Box<dyn Error>> {
-    let mut total = categoryinfo["pages"].as_u64().ok_or("categoryinfo.pages")? + categoryinfo["files"].as_u64().ok_or("categoryinfo.files")?;
-    let num_subcats = categoryinfo["subcats"].as_u64().ok_or("categoryinfo.subcats")?;
+    // can't use u64 because sometimes the API returns negative numbers for these values (????)
+    let mut total =
+        make_nonnegative(categoryinfo["pages"].as_i64().ok_or(format!(
+            "categoryinfo.pages '{}' '{:?}' '{:?}'",
+            category_title, categoryinfo["pages"], categoryinfo
+        ))?) + make_nonnegative(categoryinfo["files"].as_i64().ok_or("categoryinfo.files")?);
+    let num_subcats = make_nonnegative(categoryinfo["subcats"].as_i64().ok_or("categoryinfo.subcats")?);
     if num_subcats > 0 {
         if never_recurse {
             total += num_subcats;
@@ -89,7 +102,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             let never_recurse = never_recurse_list.iter().any(|s| s == tracked_cat_title);
-            counts.insert(tracked_cat_title.to_string(), size(&api, tracked_cat_title, &tracked_cat_result["categoryinfo"], never_recurse)?);
+            match size(&api, tracked_cat_title, &tracked_cat_result["categoryinfo"], never_recurse) {
+                Ok(num) => { counts.insert(tracked_cat_title["Category:".len()..].to_string(), num); },
+                Err(e) => println!("size err: inner {}, res pg {:?}", e, tracked_cat_result_page),
+            }
         }
     }
 
