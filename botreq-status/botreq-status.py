@@ -4,8 +4,10 @@ import mwparserfromhell
 import pywikibot
 import re
 import sys
+import urllib
 
 BOTREQ = "Wikipedia:Bot requests"
+BOTREQ_HTML_URL = "https://en.wikipedia.org/w/index.php?title=Wikipedia:Bot_requests&action=view"
 BOTOP_CAT = "Wikipedia bot operators"
 REPORT_PAGE = "User:EnterpriseyBot/BOTREQ status"
 TABLE_HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]] discussions, updated automatically by {{user|EnterpriseyBot}}.</noinclude>
@@ -13,11 +15,12 @@ TABLE_HEADER = """<noinclude>{{botnav}}This is a table of current [[WP:BOTREQ|]]
 ! # !! Title !! Replies !! Last editor !! Date/Time !! Last botop editor !! Date/Time
 """
 SUMMARY = "Bot updating BOTREQ status table ({} requests)"
+USER_NONE_WIKITEXT = "{{sort|ω|{{no result|None}}}}"
 
 USER = re.compile(r"\[\[User.*?:(.*?)(?:\||(?:\]\]))")
 TIMESTAMP = re.compile(r"\d{2}:\d{2}, \d{1,2} [A-Za-z]* \d{4}")
 SIGNATURE = re.compile(r"\[\[User.*?\]\].*?\(UTC\)")
-SECTION_HEADER = re.compile(r"^==\s*(.+?)\s*==$", flags=re.M)
+SECTION_HEADER = re.compile(r"^==\s*.+?\s*==$", flags=re.M)
 
 SIGNATURE_TIME_FORMAT = "%H:%M, %d %B %Y"
 TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
@@ -25,39 +28,7 @@ TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
 class Request:
     pass
 
-def print_log(what_to_print):
-    print(datetime.datetime.utcnow().strftime("[%Y-%m-%dT%H:%M:%SZ] ") + what_to_print)
-
 def make_table_row(r):
-    replies = ('style="background: red;" | ' if r.replies == 0 else '') + str(r.replies)
-
-    # Utility function for processing
-    def take_inner(regex, text):
-        """
-        Given a regex with exactly one capturing group and some text,
-        return the text after all occurrences of the regex have been
-        replaced with the group.
-
-        Example: take_inner("a(.)a", "aba") == "b"
-        """
-        return re.sub(regex, r"\1", text)
-
-    # Row number
-    row_number = r.row_number
-
-    # We'll be putting r.title in a wikilink, so we can't have nested wikilinks
-    title = take_inner(r"\[\[(?:.+?\|)?(.+?)\]\]", r.title)
-
-    # Nested external links also won't work
-    title = take_inner(r"\[http[^ ]+? (.+?)\]", title)
-
-    # Escape some characters in the link target
-    encodings = {"#": "%23", "<": "%3C", ">": "%3E", "[": "%5B", "]": "%5D", "|": "%7C", "{": "%7B", "}": "%7D"}
-    target = re.sub("[{}]".format("".join(map(re.escape, encodings.keys()))), lambda match: encodings[match.group(0)], title)
-
-    # Remove formatting in the link target
-    target = take_inner(r"''([^']+)''", take_inner(r"'''([^']+)'''", target))
-
     if type(r.last_edit_time) is datetime.datetime:
         old = (datetime.datetime.now() - r.last_edit_time).days > 60
         r.last_edit_time = ('style="background: red;" | ' if old else '') + r.last_edit_time.strftime(TIME_FORMAT_STRING)
@@ -65,7 +36,13 @@ def make_table_row(r):
     if type(r.last_botop_time) is datetime.datetime:
         r.last_botop_time = r.last_botop_time.strftime(TIME_FORMAT_STRING)
 
-    elements = map(str, [row_number, target, title, replies, r.last_editor, r.last_edit_time, r.last_botop_editor, r.last_botop_time])
+    # Add a red backgroud to the replies
+    replies = ('style="background: red;" | ' if r.replies == 0 else '') + str(r.replies)
+
+    def user_link(username):
+        return USER_NONE_WIKITEXT if username == USER_NONE_WIKITEXT else '[[User:' + username + '|' + username + ']]'
+
+    elements = map(str, [r.row_number, r.html_id, r.title, replies, user_link(r.last_editor), r.last_edit_time, user_link(r.last_botop_editor), r.last_botop_time])
     return u"|-\n| {} || [[WP:Bot requests#{}|{}]] || {} || {} || {} || {} || {}".format(*elements)
 
 botop_cache = {}
@@ -78,8 +55,16 @@ def is_botop(wiki, username):
     botop_cache[username] = result
     return result
 
+def get_section_titles_and_ids():
+    html = urllib.request.urlopen(BOTREQ_HTML_URL).read().decode('utf-8')
+    sections = []
+    for matchobj in re.finditer(r'<h2 [^>]+?><span (?:class="mw-headline" )?id="([^"]+)".+?</h2>', html):
+        title = re.sub(r'<.+?>', '', matchobj.group(0).partition('<span class="mw-editsection">')[0])
+        id = matchobj.group(1)
+        sections.append({'title': title, 'id': id})
+    return sections
+
 def main():
-    print_log("Starting botreq-status at " + datetime.datetime.utcnow().isoformat())
     wiki = pywikibot.Site("en", "wikipedia")
     wiki.login()
     botreq = pywikibot.Page(wiki, BOTREQ)
@@ -103,21 +88,13 @@ def main():
         this_section_start = section_header_match.end(0)
         section_content = page_content[this_section_start:this_section_end]
         section_content = section_content.strip()
-        section_header = section_header_match.group(1).strip()
-
-        # In the event of duplicates, use "=" to flag duplication
-        while section_header in sections:
-            section_header = "=" + section_header
-
-        sections.append((section_header, section_content))
+        sections.append(section_content)
 
     def section_to_request(enumerated_section_tuple):
-        enum_number, section_tuple = enumerated_section_tuple
-        section_header, section_wikitext = section_tuple
+        enum_number, section_wikitext = enumerated_section_tuple
         section = mwparserfromhell.parse(section_wikitext)
         r = Request()
         r.row_number = enum_number + 1
-        r.title = section_header
         r.replies = section.count(u"(UTC)") - 1
         signatures = []
         for index, each_node in enumerate(section.nodes):
@@ -151,7 +128,7 @@ def main():
         signatures = [(x.partition('#')[0], y) for x, y in signatures]
 
         # Default values for everything
-        r.last_editor, r.last_edit_time = r.last_botop_editor, r.last_botop_time = "{{no result|None}}", "{{n/a}}"
+        r.last_editor, r.last_edit_time = r.last_botop_editor, r.last_botop_time = USER_NONE_WIKITEXT, "{{n/a}}"
 
         if signatures:
             r.last_editor, r.last_edit_time = signatures[-1]
@@ -164,16 +141,20 @@ def main():
     # Why enumerate? Because we need row numbers in the table
     requests = list(map(section_to_request, enumerate(sections)))
 
-    num_requests = len(list(requests))
-    print_log("Parsed BOTREQ and made a list of {} requests.".format(num_requests))
+    # Add in title & HTML id
+    section_titles_and_ids = get_section_titles_and_ids()
+    assert len(requests) == len(section_titles_and_ids)
+    for (request, title_and_id) in zip(requests, section_titles_and_ids):
+        request.title = title_and_id['title']
+        request.html_id = title_and_id['id']
+
     table_rows = map(make_table_row, requests)
     table = "\n".join(table_rows) + "\n|}"
     wikitext = TABLE_HEADER + table
 
     report_page = pywikibot.Page(wiki, REPORT_PAGE)
     report_page.text = wikitext
-    report_page.save(summary=SUMMARY.format(num_requests))
-    print_log("Saved {}.".format(REPORT_PAGE))
+    report_page.save(summary=SUMMARY.format(len(list(requests))))
 
 if __name__ == "__main__":
     main()
