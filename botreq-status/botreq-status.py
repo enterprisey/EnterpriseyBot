@@ -20,7 +20,7 @@ USER_NONE_WIKITEXT = "{{sort|ω|{{no result|None}}}}"
 USER = re.compile(r"\[\[User.*?:(.*?)(?:\||(?:\]\]))")
 TIMESTAMP = re.compile(r"\d{2}:\d{2}, \d{1,2} [A-Za-z]* \d{4}")
 SIGNATURE = re.compile(r"\[\[User.*?\]\].*?\(UTC\)")
-SECTION_HEADER = re.compile(r"^==\s*.+?\s*==$", flags=re.M)
+SECTION_HEADER = re.compile(r"^==([^=]|\s+).*?\s*==$", flags=re.M)
 
 SIGNATURE_TIME_FORMAT = "%H:%M, %d %B %Y"
 TIME_FORMAT_STRING = "%Y-%m-%d, %H:%M"
@@ -58,7 +58,7 @@ def is_botop(wiki, username):
 def get_section_titles_and_ids():
     html = urllib.request.urlopen(BOTREQ_HTML_URL).read().decode('utf-8')
     sections = []
-    for matchobj in re.finditer(r'<h2 [^>]+?><span (?:class="mw-headline" )?id="([^"]+)".+?</h2>', html):
+    for matchobj in re.finditer(r'<h2[^>]*?><span (?:class="mw-headline" )?id="([^"]+)".+?</h2>', html):
         title = re.sub(r'<.+?>', '', matchobj.group(0).partition('<span class="mw-editsection">')[0])
         id = matchobj.group(1)
         sections.append({'title': title, 'id': id})
@@ -143,7 +143,9 @@ def main():
 
     # Add in title & HTML id
     section_titles_and_ids = get_section_titles_and_ids()
-    assert len(requests) == len(section_titles_and_ids)
+    print(section_titles_and_ids)
+    if len(requests) != len(section_titles_and_ids):
+        raise Exception('len(requests) != len(section_titles_and_ids): {} != {}'.format(len(requests), len(section_titles_and_ids)))
     for (request, title_and_id) in zip(requests, section_titles_and_ids):
         request.title = title_and_id['title']
         request.html_id = title_and_id['id']
