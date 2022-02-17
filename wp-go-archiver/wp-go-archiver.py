@@ -5,7 +5,7 @@ import sys
 
 WP_GO_TITLE = "Wikipedia:Goings-on"
 DATE_REGEX = r"\[\[(\w+ \d{1,2})\]\], \[\[(\d{4})\]\]"
-CURRENT_ITEM = r"\*\s?[\s\S]+?\(\d{1,2} \w+?\)\n"
+CURRENT_ITEM = r"\*\s?.+?\([ \w]+?\)\n"
 HATNOTE = "{{redirect|WP:GO|the Go button|Help:Searching|the Go WikiProject|Wikipedia:WikiProject Go}}"
 ADVERTISEMENT = " ([[Wikipedia:Bots/Requests for approval/APersonBot 6|Bot]])"
 
