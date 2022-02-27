@@ -33,7 +33,7 @@ archive_title = WP_GO_TITLE + "/" + previous_date
 print("Archiving to {}".format(archive_title))
 wp_go.text = wp_go.text.replace(HATNOTE, "").strip()
 wp_go.save(summary="Stripping hatnote before archival" + ADVERTISEMENT)
-wp_go.move(archive_title, reason="Archive" + ADVERTISEMENT, movetalkpage=False)
+wp_go.move(archive_title, reason="Archive" + ADVERTISEMENT, movetalk=False)
 
 # Create a new page with the updated text
 new_text = current_text
