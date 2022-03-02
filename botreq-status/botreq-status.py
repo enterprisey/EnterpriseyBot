@@ -156,7 +156,7 @@ def main():
 
     report_page = pywikibot.Page(wiki, REPORT_PAGE)
     report_page.text = wikitext
-    report_page.save(summary=SUMMARY.format(len(list(requests))))
+    report_page.save(quiet=True, summary=SUMMARY.format(len(list(requests))))
 
 if __name__ == "__main__":
     main()
