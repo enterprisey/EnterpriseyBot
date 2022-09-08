@@ -58,8 +58,9 @@ def is_botop(wiki, username):
 def get_section_titles_and_ids():
     html = urllib.request.urlopen(BOTREQ_HTML_URL).read().decode('utf-8')
     sections = []
-    for matchobj in re.finditer(r'<span class="mw-headline" id="([^"]+)"', html):
-        title = re.sub(r'<.+?>', '', matchobj.group(0).partition('<span class="mw-editsection">')[0])
+    for matchobj in re.finditer(r'<h2.+?<span class="mw-headline" id="([^"]+)".+?</h2>', html):
+        # sorry this is awful
+        title = re.sub('<a .+?>(.+?)</a>', '\\1', re.sub('^(<.+?>)+', '', re.sub('<span.+?</span>', '', re.sub('<a (?!href="[^"]).+?</a>', '', matchobj.group(0)))).partition('</span>')[0])
         id = matchobj.group(1)
         sections.append({'title': title, 'id': id})
     return sections
@@ -143,7 +144,6 @@ def main():
 
     # Add in title & HTML id
     section_titles_and_ids = get_section_titles_and_ids()
-    print(section_titles_and_ids)
     if len(requests) != len(section_titles_and_ids):
         raise Exception('len(requests) != len(section_titles_and_ids): {} != {}'.format(len(requests), len(section_titles_and_ids)))
     for (request, title_and_id) in zip(requests, section_titles_and_ids):
